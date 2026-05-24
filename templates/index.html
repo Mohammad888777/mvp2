@@ -1,0 +1,273 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>  تحلیل هوشمند فروش</title>
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body {
+      background: radial-gradient(circle at top left, #1e3a8a 0%, transparent 30%),
+                  radial-gradient(circle at bottom right, #4f46e5 0%, transparent 30%),
+                  linear-gradient(135deg, #020617, #0f172a, #111827);
+      min-height: 100vh;
+      color: white;
+    }
+    .glass { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 1.5rem; }
+    .space-btn { background: linear-gradient(135deg, #2563eb, #7c3aed); transition: 0.3s; }
+    .space-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 0 20px rgba(59,130,246,0.5); }
+    .gradient-text { background: linear-gradient(to right, #60a5fa, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .card-hover { transition: all 0.3s; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
+  </style>
+</head>
+<body class="p-8">
+  <div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-12">
+      <div>
+        <h1 class="text-4xl font-black gradient-text">تحلیل هوشمند </h1>
+        <p class="text-gray-300 mt-2">
+          "فایل فروش خود را آپلود کنید و در چند ثانیه insight بگیرید"
+
+        </p>
+      </div>
+      <div id="auth-section"></div>
+    </div>
+
+    <div id="mode-banner" class="mb-6 text-center text-sm text-cyan-300"></div>
+
+    <!-- Upload Section -->
+    <div id="upload-section" class="glass p-10 text-center">
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" />
+      <button onclick="handleUploadClick()" id="uploadBtn" class="space-btn px-12 py-5 rounded-3xl text-xl font-bold">
+        <i class="fas fa-upload ml-2"></i> انتخاب فایل
+      </button>
+      <div class="mt-4">
+        <a href="/history" class="text-purple-300 hover:text-purple-200">📜 مشاهده تاریخچه تحلیل‌ها</a>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="result-section" class="hidden mt-10 glass p-8">
+      <div class="flex justify-between items-center mb-6">
+      <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
+        <br>
+
+        <h2 class="text-2xl font-bold gradient-text">📊 نتایج تحلیل</h2>
+        <button onclick="closeResults()" class="text-gray-400 hover:text-white">✕ بستن</button>
+      </div>
+      <div id="kpi-cards" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"></div>
+      <div id="insights-list"></div>
+      <div class="flex justify-center mt-8">
+        <button onclick="downloadCleanedFile()" class="space-btn px-8 py-4 rounded-2xl font-bold">
+          <i class="fas fa-download ml-2"></i> دانلود فایل اصلاح‌شده
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Modal -->
+  <div id="login-modal" class="hidden fixed inset-0 bg-black  flex items-center justify-center z-50">
+    <div class="glass rounded-3xl p-8 w-96 text-center">
+      <h2 class="text-2xl font-bold mb-4">ورود / ثبت‌نام</h2>
+      <button onclick="loginWithEmail()" class="space-btn w-full py-3 rounded-xl mb-3">ورود با ایمیل</button>
+      <button onclick="guestLogin()" class="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10">ورود مهمان</button>
+      <button onclick="closeModal()" class="mt-4 text-gray-400">بستن</button>
+    </div>
+  </div>
+
+  <script>
+    let cleanedDownloadUrl = null;
+    let isGuest = false;
+    let userEmail = null;
+
+    // ========== Auth Functions ==========
+    async function checkAuth() {
+      const res = await fetch('/api/me', { credentials: 'include' });
+      const data = await res.json();
+      if (data.authenticated) {
+        if (data.guest) {
+          isGuest = true;
+          userEmail = null;
+        } else {
+          isGuest = false;
+          userEmail = data.email;
+        }
+      } else {
+        isGuest = false;
+        userEmail = null;
+      }
+      renderAuth();
+    }
+
+    function renderAuth() {
+      const section = document.getElementById('auth-section');
+      const banner = document.getElementById('mode-banner');
+      if (userEmail) {
+        section.innerHTML = `<div class="glass px-4 py-2 rounded-2xl">${userEmail} <button onclick="logout()" class="mr-3 text-red-400">خروج</button></div>`;
+        banner.innerHTML = `✅ وارد شده به عنوان ${userEmail}`;
+      } else if (isGuest) {
+        section.innerHTML = `<div class="glass px-4 py-2 rounded-2xl">حالت مهمان <button onclick="logout()" class="mr-3 text-red-400">خروج</button></div>`;
+        banner.innerHTML = `👤 حالت مهمان (۱ ساعت اعتبار)`;
+      } else {
+        section.innerHTML = `<button onclick="openModal()" class="space-btn px-4 py-2 rounded-xl">ورود / ثبت‌نام</button>`;
+        banner.innerHTML = `
+
+        <h1>"فایل شما فقط برای تحلیل استفاده می‌شود و پس از پردازش ذخیره نخواهد شد."</h1>
+        <br>
+        <br>
+        ⚠️ برای تحلیل فایل وارد شوید
+        
+        `;
+      }
+    }
+
+    function openModal() { document.getElementById('login-modal').classList.remove('hidden'); }
+    function closeModal() { document.getElementById('login-modal').classList.add('hidden'); }
+
+    async function loginWithEmail() {
+      const email = prompt("ایمیل خود را وارد کنید:");
+      if (!email) return;
+      const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email}), credentials: 'include' });
+      if (res.ok) {
+        closeModal();
+        checkAuth();
+      } else alert("خطا در ورود");
+    }
+
+    async function guestLogin() {
+      await fetch('/api/guest', { method: 'POST', credentials: 'include' });
+      closeModal();
+      checkAuth();
+    }
+
+    async function logout() {
+      await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+      checkAuth();
+      location.reload();
+    }
+
+    // ========== Upload ==========
+    function handleUploadClick() {
+      if (!userEmail && !isGuest) {
+        openModal();
+        return;
+      }
+      document.getElementById('fileInput').click();
+    }
+
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      const btn = document.getElementById('uploadBtn');
+      const original = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال آپلود...';
+      btn.disabled = true;
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      btn.innerHTML = original;
+      btn.disabled = false;
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+      // رفتن به صفحه mapping
+      window.location.href = `/mapping/${data.session_id}/`;
+    });
+
+    // ========== نمایش نتایج (برای استفاده از تاریخچه و همچنین پردازش معمولی) ==========
+    function showResults(data) {
+      // مخفی کردن بخش آپلود و نمایش بخش نتایج
+      document.getElementById('upload-section').classList.add('hidden');
+      document.getElementById('result-section').classList.remove('hidden');
+      
+      cleanedDownloadUrl = data.download_url;
+      const kpis = data.insights.kpis || {};
+      const textInsights = data.insights.text_insights || [];
+      const topProducts = data.insights.top_products || [];
+      const topCustomers = data.insights.top_customers || [];
+
+      // کارت‌های KPI
+      let kpiHtml = `
+        <div class="glass p-6 text-center card-hover">
+          <i class="fas fa-sack-dollar text-3xl text-cyan-300"></i>
+          <p class="text-gray-400 mt-2">درآمد کل</p>
+          <h3 class="text-2xl font-bold">${Number(kpis.total_revenue || 0).toLocaleString('fa-IR')}</h3>
+        </div>
+        <div class="glass p-6 text-center card-hover">
+          <i class="fas fa-cart-shopping text-3xl text-blue-300"></i>
+          <p class="text-gray-400 mt-2">تعداد سفارش</p>
+          <h3 class="text-2xl font-bold">${Number(kpis.total_orders || 0).toLocaleString('fa-IR')}</h3>
+        </div>
+        <div class="glass p-6 text-center card-hover">
+          <i class="fas fa-chart-line text-3xl text-purple-300"></i>
+          <p class="text-gray-400 mt-2">میانگین ارزش سفارش</p>
+          <h3 class="text-2xl font-bold">${Number(kpis.avg_order_value || 0).toLocaleString('fa-IR')}</h3>
+        </div>
+        <div class="glass p-6 text-center card-hover">
+          <i class="fas fa-users text-3xl text-pink-300"></i>
+          <p class="text-gray-400 mt-2">مشتریان یکتا</p>
+          <h3 class="text-2xl font-bold">${Number(kpis.unique_customers || 0).toLocaleString('fa-IR')}</h3>
+        </div>
+        <div class="glass p-6 text-center card-hover">
+          <i class="fas fa-coins text-3xl text-emerald-300"></i>
+          <p class="text-gray-400 mt-2">سود خالص</p>
+          <h3 class="text-2xl font-bold">${Number(kpis.total_profit || 0).toLocaleString('fa-IR')}</h3>
+        </div>
+      `;
+      document.getElementById('kpi-cards').innerHTML = kpiHtml;
+
+      let insightsHtml = `<h3 class="text-xl font-bold mb-3">🧠 بینش‌های هوشمند</h3><ul class="list-disc pr-5 space-y-2">`;
+      textInsights.forEach(t => insightsHtml += `<li>${t}</li>`);
+      insightsHtml += `</ul>`;
+
+      if (topProducts.length) {
+        insightsHtml += `<h4 class="text-lg font-bold mt-6 mb-3">🏆 محصولات برتر</h4><ul class="space-y-2">`;
+        topProducts.forEach((item, i) => {
+          insightsHtml += `<li class="glass p-3 rounded-xl flex justify-between"><span>${i+1}. ${item.name}</span><span class="text-cyan-300">${Number(item.revenue).toLocaleString('fa-IR')}</span></li>`;
+        });
+        insightsHtml += `</ul>`;
+      }
+      if (topCustomers.length) {
+        insightsHtml += `<h4 class="text-lg font-bold mt-6 mb-3">👑 مشتریان برتر</h4><ul class="space-y-2">`;
+        topCustomers.forEach((item, i) => {
+          insightsHtml += `<li class="glass p-3 rounded-xl flex justify-between"><span>${i+1}. ${item.name}</span><span class="text-purple-300">${Number(item.revenue).toLocaleString('fa-IR')}</span></li>`;
+        });
+        insightsHtml += `</ul>`;
+      }
+      document.getElementById('insights-list').innerHTML = insightsHtml;
+    }
+
+    function downloadCleanedFile() {
+      if (cleanedDownloadUrl) window.open(cleanedDownloadUrl, '_blank');
+      else alert("فایل آماده نیست");
+    }
+
+    function closeResults() {
+      document.getElementById('result-section').classList.add('hidden');
+      document.getElementById('upload-section').classList.remove('hidden');
+      cleanedDownloadUrl = null;
+    }
+
+    // ========== بررسی نتایج سریع از تاریخچه ==========
+    window.addEventListener('DOMContentLoaded', () => {
+      const quickResult = sessionStorage.getItem('quickResult');
+      if (quickResult) {
+        try {
+          const data = JSON.parse(quickResult);
+          showResults(data);
+          sessionStorage.removeItem('quickResult');
+        } catch(e) {}
+      }
+    });
+
+    // اجرای اولیه
+    checkAuth();
+  </script>
+</body>
+</html>

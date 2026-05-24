@@ -1,0 +1,12 @@
+{
+    "django": {
+      "settingsFile": "config/settings.py"
+    },
+    "disks":[
+      {
+        "name":"temp",
+        "mountTo":"media"
+      }
+      
+    ]
+}

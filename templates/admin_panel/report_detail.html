@@ -1,0 +1,83 @@
+{% extends 'admin_panel/base.html' %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between">
+        <h1 class="text-3xl font-bold">📄 {{ report.filename }}</h1>
+        <a href="{% url 'admin_panel:report_list' %}" class="text-cyan-300">← بازگشت به لیست</a>
+    </div>
+
+    <div class="card p-6 grid grid-cols-2 gap-4">
+    <div><span class="text-gray-400">کاربر:</span> {{ report.user.email|default:"مهمان" }}</div>
+    <div><span class="text-gray-400">شناسه جلسه:</span> {{ report.session_id }}</div>
+    <div><span class="text-gray-400">تاریخ ایجاد:</span> {{ report.created_at|date:"Y/m/d H:i" }}</div>
+    <div>
+        <span class="text-gray-400">دانلود فایل اصلاح‌شده:</span>
+        <a href="/api/download-cleaned/{{ report.session_id }}" class="text-green-400 mr-2" target="_blank">
+            <i class="fas fa-download"></i> دانلود
+        </a>
+    </div>
+    <div class="col-span-2">
+        <span class="text-gray-400">نگاشت ستون‌ها:</span>
+        <pre class="text-xs mt-2 bg-black/20 p-2 rounded">{{ mapping|json_script:"mapping-data" }}<span id="mapping-display"></span></pre>
+    </div>
+</div>
+
+    <!-- KPIها -->
+    <div class="card p-6">
+        <h2 class="text-xl font-bold mb-4">📊 شاخص‌های کلیدی</h2>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div><div class="text-gray-400">درآمد کل</div><div class="text-2xl font-bold">{{ kpis.total_revenue|default:0|floatformat:0 }}</div></div>
+            <div><div class="text-gray-400">تعداد سفارشات</div><div class="text-2xl">{{ kpis.total_orders|default:0 }}</div></div>
+            <div><div class="text-gray-400">میانگین ارزش سفارش</div><div class="text-2xl">{{ kpis.avg_order_value|default:0|floatformat:0 }}</div></div>
+            <div><div class="text-gray-400">مشتریان یکتا</div><div class="text-2xl">{{ kpis.unique_customers|default:0 }}</div></div>
+            <div><div class="text-gray-400">سود خالص</div><div class="text-2xl">{{ kpis.total_profit|default:0|floatformat:0 }}</div></div>
+        </div>
+    </div>
+
+    <!-- بینش‌ها -->
+    <div class="card p-6">
+        <h2 class="text-xl font-bold mb-4">🧠 بینش‌های هوشمند</h2>
+        <ul class="list-disc pr-5 space-y-2">
+            {% for insight in text_insights %}
+            <li>{{ insight|safe }}</li>
+            {% empty %}
+            <li>بینشی ثبت نشده است</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- محصولات برتر -->
+    {% if top_products %}
+    <div class="card p-6">
+        <h2 class="text-xl font-bold mb-4">🏆 محصولات برتر</h2>
+        <div class="space-y-2">
+            {% for p in top_products %}
+            <div class="flex justify-between border-b border-white/10 pb-2">
+                <span>{{ p.name }}</span><span class="text-cyan-300">{{ p.revenue|floatformat:0 }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- مشتریان برتر -->
+    {% if top_customers %}
+    <div class="card p-6">
+        <h2 class="text-xl font-bold mb-4">👑 مشتریان برتر</h2>
+        <div class="space-y-2">
+            {% for c in top_customers %}
+            <div class="flex justify-between border-b border-white/10 pb-2">
+                <span>{{ c.name }}</span><span class="text-purple-300">{{ c.revenue|floatformat:0 }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    // نمایش mapping به صورت JSON
+    const mappingData = {{ mapping|safe }};
+    document.getElementById('mapping-display').innerHTML = JSON.stringify(mappingData, null, 2);
+</script>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>تاریخچه تحلیل‌ها | فروش‌اینسایت</title>
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body { background: linear-gradient(135deg, #020617, #0f172a); color: white; }
+    .glass { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 1.5rem; }
+    .space-btn { background: linear-gradient(135deg, #2563eb, #7c3aed); transition: 0.3s; }
+    .space-btn:hover { transform: translateY(-2px); }
+  </style>
+</head>
+<body class="p-8">
+  <div class="max-w-4xl mx-auto">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold gradient-text">📜 تاریخچه تحلیل‌ها</h1>
+      <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
+    </div>
+    <div id="history-list" class="space-y-4">
+      <div class="text-center text-gray-400">در حال بارگذاری...</div>
+    </div>
+  </div>
+
+  <script>
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/history', { credentials: 'include' });
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById('history-list').innerHTML = `<div class="glass p-4 text-red-400">${data.error}</div>`;
+          return;
+        }
+        if (!data.history.length) {
+          document.getElementById('history-list').innerHTML = `<div class="glass p-4 text-center">هیچ تحلیلی یافت نشد.</div>`;
+          return;
+        }
+        let html = '';
+        for (let item of data.history) {
+          const date = new Date(item.created_at * 1000).toLocaleString('fa-IR');
+          const filename = escapeHtml(item.filename);
+          const revenue = item.insights?.kpis?.total_revenue || 0;
+          html += `
+            <div class="glass rounded-2xl p-5 flex flex-wrap justify-between items-center gap-4">
+              <div>
+                <h3 class="text-xl font-bold text-cyan-300">${filename}</h3>
+                <p class="text-sm text-gray-400">${date}</p>
+                <p class="text-sm">💰 درآمد: ${Number(revenue).toLocaleString('fa-IR')}</p>
+              </div>
+              <button onclick="reloadAnalysis('${item.session_id}', ${JSON.stringify(item.mapping).replace(/"/g, '&quot;')})" 
+                      class="space-btn px-4 py-2 rounded-xl text-sm">نمایش دوباره</button>
+            </div>
+          `;
+        }
+        document.getElementById('history-list').innerHTML = html;
+      } catch (err) {
+        document.getElementById('history-list').innerHTML = `<div class="glass p-4 text-red-400">خطا در دریافت تاریخچه</div>`;
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+      });
+    }
+
+    
+    async function reloadAnalysis(sessionId, mapping) {
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال بارگذاری...';
+        
+        const res = await fetch('/api/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ session_id: sessionId, mapping: JSON.stringify(mapping) })
+        });
+        const data = await res.json();
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        sessionStorage.setItem('quickResult', JSON.stringify(data));
+        window.location.href = '/';
+    }
+
+
+    loadHistory();
+  </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+{% extends 'admin_panel/base.html' %}
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-3xl font-bold">داشبورد مدیریت</h1>
+    
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="card p-6">
+            <div class="text-gray-400">کل کاربران</div>
+            <div class="text-3xl font-bold">{{ total_users }}</div>
+            <div class="text-sm text-green-400 mt-2">+{{ new_users_week }} در هفته اخیر</div>
+        </div>
+        <div class="card p-6">
+            <div class="text-gray-400">کل گزارش‌ها</div>
+            <div class="text-3xl font-bold">{{ total_reports }}</div>
+            <div class="text-sm text-green-400 mt-2">+{{ new_reports_week }} در هفته اخیر</div>
+        </div>
+        <div class="card p-6">
+            <div class="text-gray-400">میانگین گزارش به ازای کاربر</div>
+            <div class="text-3xl font-bold">{{ total_reports|default:1|divisibleby:total_users|floatformat:1 }}</div>
+        </div>
+        <div class="card p-6">
+            <div class="text-gray-400">آخرین فعالیت</div>
+            <div class="text-sm mt-2">{{ recent_reports.first.created_at|date:"Y/m/d H:i"|default:"-" }}</div>
+        </div>
+    </div>
+
+    <!-- Users with most reports -->
+    <div class="card p-6">
+        <h2 class="text-xl font-bold mb-4">👥 کاربران فعال (بیشترین گزارش)</h2>
+        <div class="space-y-2">
+            {% for u in users_with_most_reports %}
+            <div class="flex justify-between items-center border-b border-white/10 pb-2">
+                <span>{{ u.email|default:u.id }}</span>
+                <span class="text-cyan-300">{{ u.report_count }} گزارش</span>
+            </div>
+            {% empty %}
+            <div class="text-gray-400">هیچ داده‌ای وجود ندارد</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Recent Reports -->
+    <div class="card p-6">
+        <h2 class="text-xl font-bold mb-4">📄 آخرین گزارش‌های آپلود شده</h2>
+        <table>
+            <thead>
+                <tr><th>نام فایل</th><th>کاربر</th><th>تاریخ</th><th>عملیات</th></tr>
+            </thead>
+            <tbody>
+                {% for r in recent_reports %}
+                <tr>
+                    <td>{{ r.filename }}</td>
+                    <td>{{ r.user.email|default:"مهمان" }}</td>
+                    <td>{{ r.created_at|date:"Y/m/d H:i" }}</td>
+                    <td><a href="{% url 'admin_panel:report_detail' r.id %}" class="text-cyan-300">جزئیات</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-center">هیچ گزارشی یافت نشد</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

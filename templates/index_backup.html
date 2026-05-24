@@ -1,0 +1,485 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>فروش‌اینسایت | تحلیل هوشمند فروش</title>
+  
+  <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+  <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" /> -->
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+
+ 
+  <!-- <link rel="stylesheet" href="https://cdn.fontcdn.ir/Font/Persian/Vazir/Vazir.css" /> -->
+  
+  <style>
+    /* @import url('https://cdn.fontcdn.ir/Font/Persian/Vazir/Vazir.css');
+    * { font-family: Vazir, sans-serif; 
+      src: url(...) format("woff2");
+    font-display: swap
+    } */
+    
+    body {
+      overflow-x: hidden;
+      background: radial-gradient(circle at top left, #1e3a8a 0%, transparent 30%),
+                  radial-gradient(circle at bottom right, #4f46e5 0%, transparent 30%),
+                  linear-gradient(135deg, #020617, #0f172a, #111827);
+      min-height: 100vh;
+      color: white;
+    }
+    
+    .glass {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+     
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.1), inset 0 0 20px rgba(255, 255, 255, 0.03);
+    }
+    
+    .neon {
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.5), 0 0 40px rgba(99, 102, 241, 0.25);
+    }
+    
+    .space-btn {
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      transition: 0.3s;
+    }
+    
+    .space-btn:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(139, 92, 246, 0.4);
+    }
+    
+    .input-dark {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+    
+    .floating-stars::before {
+      content: "";
+      position: fixed;
+      width: 2px; height: 2px;
+      background: white;
+      border-radius: 50%;
+      top: 10%; left: 20%;
+      box-shadow: 100px 200px white, 300px 100px white, 500px 400px white,
+                  800px 100px white, 1200px 300px white, 1400px 200px white;
+    
+                  
+      z-index: -1;
+    }
+    
+    @keyframes twinkle { from { opacity: 0.3; } to { opacity: 1; } }
+    
+    .gradient-text {
+      background: linear-gradient(to right, #60a5fa, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .card-hover { transition: .35s; }
+    .card-hover:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 0 25px rgba(59, 130, 246, 0.25);
+    }
+  </style>
+</head>
+<body class="floating-stars">
+
+  <div class="max-w-7xl mx-auto px-6 py-10">
+    <!-- HEADER -->
+    <div class="flex flex-col lg:flex-row items-center justify-between gap-6 mb-12">
+      <div>
+        <h4 class="text-2xl lg:text-4xl font-black gradient-text mb-4">
+          🚀 "فایل فروش خود را آپلود کنید و در چند ثانیه insight بگیرید"
+        </h4>
+        <p class="text-gray-300 text-3xl leading-9 max-w-2xl">
+"فایل شما فقط برای تحلیل استفاده می‌شود و پس از پردازش ذخیره نخواهد شد."
+        </p>
+      </div>
+      <div id="auth-section"></div>
+    </div>
+
+    <div id="mode-banner" class="mb-8 text-center text-sm font-bold text-cyan-300"></div>
+
+    <!-- UPLOAD SECTION -->
+    <div id="upload-section" class="glass rounded-[35px] p-10 neon">
+      <div class="border-2 border-dashed border-cyan-500/30 rounded-[30px] p-16 text-center hover:border-cyan-400 transition-all">
+        <div class="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-8">
+          <i class="fas fa-cloud-upload-alt text-6xl text-cyan-300"></i>
+        </div>
+        <h2 class="text-4xl font-black mb-4">آپلود فایل فروش</h2>
+        <p class="text-gray-300 text-lg mb-10">فایل Excel یا CSV را وارد کن تا تحلیل فضایی دریافت کنی ✨</p>
+        
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" />
+        
+        <button onclick="handleUploadClick()" id="uploadBtn"
+          class="space-btn px-12 py-5 rounded-3xl text-xl font-bold text-white neon">
+          <i class="fas fa-upload ml-2"></i>
+          انتخاب فایل
+        </button>
+      </div>
+    </div>
+
+    <!-- MAPPING SECTION -->
+    <!-- <div id="mapping-section" class="hidden mt-10 glass rounded-[35px] p-10">
+      <h2 class="text-4xl font-black mb-8 gradient-text">🔗 نگاشت ستون‌ها</h2>
+      <div id="mapping-fields" class="grid grid-cols-1 md:grid-cols-2 gap-5"></div>
+      <button onclick="processData()" 
+        class="space-btn w-full mt-10 py-5 rounded-3xl text-2xl font-black">
+        ✨ تولید گزارش هوشمند
+      </button>
+    </div> -->
+
+    <!-- RESULTS SECTION -->
+    <div id="result-section" class="hidden mt-10">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div id="kpi-cards" class="space-y-6"></div>
+        <div class="lg:col-span-2 glass rounded-[35px] p-8">
+          <!-- <img id="trend-chart" class="w-full rounded-3xl hidden mb-8 border border-cyan-500/20" alt="trend" /> -->
+          <div class="flex justify-center mb-10">
+            <button onclick="downloadCleanedFile()" class="space-btn px-8 py-4 rounded-2xl font-bold text-lg">
+              <i class="fas fa-download ml-2"></i> دانلود فایل اصلاح‌شده
+            </button>
+          </div>
+          <div id="insights-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGIN MODAL -->
+  <div id="login-modal" class="hidden fixed inset-0 bg-black backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="glass rounded-[35px] p-10 w-full max-w-md relative neon">
+      <button onclick="closeLoginModal()" class="absolute top-5 left-5 text-red-400 text-2xl">
+        <i class="fas fa-times"></i>
+      </button>
+      <div class="text-center mb-10">
+        <div class="w-28 h-28 mx-auto rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-6">
+          <i class="fas fa-user-astronaut text-5xl text-cyan-300"></i>
+        </div>
+        <!-- <h2 class="text-4xl font-black mb-4">ورود به ایستگاه فضایی</h2> -->
+        <p class="text-gray-300 leading-8">برای تحلیل فایل وارد شوید یا به عنوان مهمان ادامه دهید</p>
+        <br>
+      </div>
+      <div class="space-y-5">
+        <button onclick="loginFromModal()" class="space-btn w-full py-5 rounded-3xl font-black text-xl">
+          <i class="fas fa-envelope ml-2"></i> ورود با ایمیل
+        </button>
+        <button onclick="guestFromModal()" class="w-full py-5 rounded-3xl border border-white/10 hover:border-cyan-400 bg-white/5 font-black text-xl transition-all">
+          <i class="fas fa-user-secret ml-2"></i> ورود مهمان
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ALLOWED_FIELDS = ['revenue','quantity','profit','date','customer','product','status','unknown'];
+    
+    let currentSessionId = null;
+    let currentMapping = {};
+    let currentUserEmail = null;
+    let currentUserId = null;
+    let isGuest = false;
+    let isUploading = false;
+
+    // ====================== AUTH ======================
+    function renderAuthSection() {
+      const section = document.getElementById('auth-section');
+      const banner = document.getElementById('mode-banner');
+      
+      if (currentUserEmail) {
+        section.innerHTML = `
+          <div class="glass rounded-3xl px-6 py-4 flex items-center gap-5">
+            <div class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+              <i class="fas fa-user text-green-400"></i>
+            </div>
+            <div>
+              <p class="text-sm text-gray-400">کاربر فعال</p>
+              <p class="font-bold">${currentUserEmail}</p>
+            </div>
+            <button onclick="logout()" class="bg-red-500/20 hover:bg-red-500/30 px-4 py-2 rounded-xl text-red-300 transition-all">خروج</button>
+          </div>`;
+        banner.innerHTML = `✅ وارد شده به عنوان <b>${currentUserEmail}</b>`;
+        return;
+      }
+      
+      if (isGuest) {
+        section.innerHTML = `
+          <div class="glass rounded-3xl px-6 py-4 flex items-center gap-5">
+            <div class="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center">
+              <i class="fas fa-user-secret text-yellow-300"></i>
+            </div>
+            <div><p class="font-bold">حالت مهمان</p></div>
+            <button onclick="logout()" class="bg-red-500/20 hover:bg-red-500/30 px-4 py-2 rounded-xl text-red-300">خروج</button>
+          </div>`;
+        banner.innerHTML = "شما در حالت مهمان هستید (۱ ساعت اعتبار)";
+        return;
+      }
+      
+      section.innerHTML = `<button onclick="openLoginModal()" class="space-btn px-8 py-4 rounded-2xl font-bold text-lg">ورود / ثبت نام</button>`;
+      banner.innerHTML = "برای شروع تحلیل ابتدا وارد شوید";
+    }
+
+    function openLoginModal() { document.getElementById('login-modal').classList.remove('hidden'); }
+    function closeLoginModal() { document.getElementById('login-modal').classList.add('hidden'); }
+
+    function handleUploadClick() {
+      if (currentUserEmail || isGuest) {
+        if (!isUploading) document.getElementById('fileInput').click();
+        return;
+      }
+      openLoginModal();
+    }
+
+    // ====================== FILE UPLOAD WITH LOADING ======================
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file || isUploading) return;
+
+      isUploading = true;
+      const uploadBtn = document.getElementById('uploadBtn');
+      const originalHTML = uploadBtn.innerHTML;
+
+      uploadBtn.disabled = true;
+      uploadBtn.innerHTML = `<i class="fas fa-spinner fa-spin ml-2"></i> در حال پردازش فایل...`;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.error) {
+          alert(data.error);
+          return;
+        }
+
+        window.location.href = `/mapping/${data.session_id}/`;
+
+        // currentSessionId = data.session_id;
+        // currentMapping = data.suggested_mapping;
+
+        // renderMapping(data.columns, data.suggested_mapping);
+
+        // document.getElementById('upload-section').classList.add('hidden');
+        // document.getElementById('mapping-section').classList.remove('hidden');
+
+      } catch (err) {
+        alert("خطا در ارتباط با سرور");
+      } finally {
+        isUploading = false;
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = originalHTML;
+        e.target.value = '';
+      }
+    });
+
+    function renderMapping(columns, suggested) {
+      const container = document.getElementById('mapping-fields');
+      container.innerHTML = '';
+      columns.forEach(col => {
+        const div = document.createElement('div');
+        div.className = "glass rounded-2xl p-5 flex items-center justify-between card-hover";
+        div.innerHTML = `
+          <span class="font-bold text-lg">${col}</span>
+          <select onchange="currentMapping['${col}']=this.value" class="bg-purple-500/10 rounded-xl px-4 py-3">
+            ${ALLOWED_FIELDS.map(f => `<option value="${f}" class="bg-purple-500" ${suggested[col] === f ? 'selected' : '' }>${f}</option>`).join('')}
+          </select>`;
+        container.appendChild(div);
+      });
+    }
+
+    async function processData() {
+      const res = await fetch('/api/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          session_id: currentSessionId,
+          mapping: JSON.stringify(currentMapping)
+        })
+      });
+      const data = await res.json();
+      if (data.error) return alert(data.error);
+      showResults(data);
+    }
+
+    
+
+    let cleanedDownloadUrl = null;
+
+    function showResults(data) {
+      // document.getElementById('mapping-section').classList.add('hidden');
+      document.getElementById('result-section').classList.remove('hidden');
+
+      const kpis = data.insights.kpis || {};
+      const textInsights = data.insights.text_insights || [];
+      const topProducts = data.insights.top_products || [];
+      const topCustomers = data.insights.top_customers || [];
+
+      // KPI Cards
+      document.getElementById('kpi-cards').innerHTML = `
+        <div class="glass rounded-3xl p-8 text-center card-hover">
+          <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-cyan-500/10 flex items-center justify-center"><i class="fas fa-sack-dollar text-3xl text-cyan-300"></i></div>
+          <p class="text-gray-400 mb-3">درآمد کل</p>
+          <h2 class="text-4xl font-black text-cyan-300">${Number(kpis.total_revenue || 0).toLocaleString('fa-IR')}</h2>
+        </div>
+        <div class="glass rounded-3xl p-8 text-center card-hover">
+          <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-blue-500/10 flex items-center justify-center"><i class="fas fa-cart-shopping text-3xl text-blue-300"></i></div>
+          <p class="text-gray-400 mb-3">تعداد سفارش</p>
+          <h2 class="text-4xl font-black text-blue-300">${Number(kpis.total_orders || 0).toLocaleString('fa-IR')}</h2>
+        </div>
+        <div class="glass rounded-3xl p-8 text-center card-hover">
+          <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-purple-500/10 flex items-center justify-center"><i class="fas fa-chart-line text-3xl text-purple-300"></i></div>
+          <p class="text-gray-400 mb-3">میانگین ارزش سفارش</p>
+          <h2 class="text-4xl font-black text-purple-300">${Number(kpis.avg_order_value || 0).toLocaleString('fa-IR')}</h2>
+        </div>
+        <div class="glass rounded-3xl p-8 text-center card-hover">
+          <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-pink-500/10 flex items-center justify-center"><i class="fas fa-users text-3xl text-pink-300"></i></div>
+          <p class="text-gray-400 mb-3">مشتریان یکتا</p>
+          <h2 class="text-4xl font-black text-pink-300">${Number(kpis.unique_customers || 0).toLocaleString('fa-IR')}</h2>
+        </div>
+        <div class="glass rounded-3xl p-8 text-center card-hover">
+          <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-emerald-500/10 flex items-center justify-center"><i class="fas fa-coins text-3xl text-emerald-300"></i></div>
+          <p class="text-gray-400 mb-3">سود خالص</p>
+          <h2 class="text-4xl font-black text-emerald-300">${Number(kpis.total_profit || 0).toLocaleString('fa-IR')}</h2>
+        </div>`;
+
+      // if (data.chart_url) {
+      //   document.getElementById('trend-chart').src = data.chart_url;
+      //   document.getElementById('trend-chart').classList.remove('hidden');
+      // }
+
+      let html = `<h3 class="text-4xl font-black gradient-text mb-8">📊 بینش‌های هوشمند</h3>`;
+      textInsights.forEach(text => {
+        html += `<div class="glass rounded-2xl p-5 mb-5 card-hover">${text}</div>`;
+      });
+
+      if (topProducts.length) {
+        html += `<h4 class="text-2xl font-black mt-10 mb-5">🏆 محصولات برتر</h4>`;
+        topProducts.forEach((item, i) => {
+          html += `<div class="glass rounded-2xl p-5 flex justify-between mb-4"><span>${i+1}. ${item.name}</span><span class="text-cyan-300 font-black">${Number(item.revenue).toLocaleString('fa-IR')}</span></div>`;
+        });
+      }
+
+      if (topCustomers.length) {
+        html += `<h4 class="text-2xl font-black mt-10 mb-5">👑 مشتریان برتر</h4>`;
+        topCustomers.forEach((item, i) => {
+          html += `<div class="glass rounded-2xl p-5 flex justify-between mb-4"><span>${i+1}. ${item.name}</span><span class="text-purple-300 font-black">${Number(item.revenue).toLocaleString('fa-IR')}</span></div>`;
+        });
+      }
+
+      document.getElementById('insights-list').innerHTML = html;
+
+      cleanedDownloadUrl = data.download_url;
+    }
+
+    function downloadCleanedFile() {
+
+  if (!cleanedDownloadUrl) {
+    alert("فایل هنوز آماده نشده");
+    return;
+  }
+
+  window.open(cleanedDownloadUrl, "_blank");
+}
+
+    async function checkAuthStatus() {
+    try {
+        const res = await fetch('/api/me', { credentials: 'include' });
+        const data = await res.json();
+        
+        if (data.authenticated) {
+            if (data.guest) {
+                isGuest = true;
+                currentUserEmail = null;
+            } else {
+                isGuest = false;
+                currentUserEmail = data.email;
+                currentUserId = data.user_id;
+            }
+        } else {
+            isGuest = false;
+            currentUserEmail = null;
+        }
+    } catch (e) {
+        console.error("Auth check failed");
+    }
+    renderAuthSection();
+}
+
+async function loginFromModal() {
+    const email = prompt("ایمیل خود را وارد کنید:");
+    if (!email) return;
+
+    try {
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email }),
+            credentials: 'include'   // ← خیلی مهم برای سشن
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+            currentUserEmail = data.email;
+            currentUserId = data.user_id;
+            isGuest = false;
+            renderAuthSection();
+            closeLoginModal();
+            
+            // بعد از لاگین موفق، فایل آپلود را باز کن
+            setTimeout(() => document.getElementById('fileInput').click(), 300);
+        } else {
+            alert(data.error || "خطا در ورود");
+        }
+    } catch (err) {
+        alert("خطا در ارتباط با سرور");
+    }
+}
+
+    async function guestFromModal() {
+    try {
+        const res = await fetch('/api/guest', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            isGuest = true;
+            currentUserEmail = null;
+            renderAuthSection();
+            closeLoginModal();
+            setTimeout(() => document.getElementById('fileInput').click(), 300);
+        }
+    } catch (err) {
+        alert("خطا در ورود مهمان");
+    }
+}
+
+    async function logout() {
+    try {
+        await fetch('/api/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+    } catch (e) {}
+    
+    currentUserEmail = null;
+    isGuest = false;
+    renderAuthSection();
+    location.reload();   // یا بدون reload هم می‌توانی
+}
+
+    
+window.onload = async () => {
+    await checkAuthStatus();   // ← مهم‌ترین خط
+};
+  </script>
+</body>
+</html>
+
+

@@ -1,0 +1,194 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>نگاشت ستون‌ها | فروش‌اینسایت</title>
+    <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        body {
+            background: radial-gradient(circle at top left, #1e3a8a 0%, transparent 30%),
+                        radial-gradient(circle at bottom right, #4f46e5 0%, transparent 30%),
+                        linear-gradient(135deg, #020617, #0f172a, #111827);
+            min-height: 100vh;
+            color: white;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.1), inset 0 0 20px rgba(255, 255, 255, 0.03);
+        }
+        .space-btn {
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            transition: 0.3s;
+        }
+        .space-btn:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        .card-hover { transition: .35s; }
+        .card-hover:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.25);
+        }
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="glass rounded-[35px] p-10 neon">
+            <h1 class="text-4xl font-black gradient-text mb-8 text-center">🔗 نگاشت ستون‌ها به فیلدهای استاندارد</h1>
+      <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
+            <br>
+            <br>
+            <form id="mappingForm">
+                <div id="mapping-fields" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
+                    <!-- داینامیک پر می‌شود -->
+                </div>
+                <button type="submit" class="space-btn w-full py-5 rounded-3xl text-2xl font-black">
+                    ✨ تولید گزارش هوشمند
+                </button>
+            </form>
+            <div id="loading" class="hidden text-center mt-6 text-cyan-300">
+                <i class="fas fa-spinner fa-spin ml-2"></i> در حال پردازش...
+            </div>
+        </div>
+
+        <div id="result-section" class="hidden mt-10 glass rounded-[35px] p-10">
+        <br>
+
+            <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
+        <br>
+        <br>
+            <h2 class="text-3xl font-black gradient-text mb-6">📊 نتایج تحلیل</h2>
+            <div id="kpi-cards" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"></div>
+            <div id="insights-list"></div>
+            <div class="flex justify-center mt-8">
+                <button onclick="downloadCleanedFile()" class="space-btn px-8 py-4 rounded-2xl font-bold text-lg">
+                    <i class="fas fa-download ml-2"></i> دانلود فایل اصلاح‌شده
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const sessionId = "{{ session_id }}";
+        const columns = {{ columns|safe }};
+        const suggestedMapping = {{ suggested_mapping|safe }};
+        const allowedFields = {{ allowed_fields|safe }};
+
+        let cleanedDownloadUrl = null;
+
+        function renderMapping() {
+            const container = document.getElementById('mapping-fields');
+            container.innerHTML = '';
+            columns.forEach(col => {
+                const div = document.createElement('div');
+                div.className = "glass rounded-2xl p-5 flex items-center justify-between card-hover";
+                div.innerHTML = `
+                    <span class="font-bold text-lg">${col}</span>
+                    <select  name="mapping[${col}]" class="bg-purple-500 rounded-xl px-4 py-3">
+                        ${allowedFields.map(f => `<option class="bg-purple" value="${f}" ${suggestedMapping[col] === f ? 'selected' : ''}>${f}</option>`).join('')}
+                    </select>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        document.getElementById('mappingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const mapping = {};
+            for (let [key, value] of formData.entries()) {
+                // key به شکل "mapping[col_name]" است
+                const colName = key.match(/\[(.*?)\]/)[1];
+                mapping[colName] = value;
+            }
+
+            document.getElementById('loading').classList.remove('hidden');
+            try {
+                const res = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        session_id: sessionId,
+                        mapping: JSON.stringify(mapping)
+                    })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                showResults(data);
+            } catch (err) {
+                alert("خطا در پردازش: " + err.message);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        });
+
+        function showResults(data) {
+            document.querySelector('.glass:first-child').classList.add('hidden');
+            document.getElementById('result-section').classList.remove('hidden');
+
+            const kpis = data.insights.kpis || {};
+            const textInsights = data.insights.text_insights || [];
+            const topProducts = data.insights.top_products || [];
+            const topCustomers = data.insights.top_customers || [];
+
+            // کارت‌های KPI
+            document.getElementById('kpi-cards').innerHTML = `
+                <div class="glass rounded-3xl p-6 text-center">
+                    <i class="fas fa-sack-dollar text-3xl text-cyan-300"></i>
+                    <p class="text-gray-400 mt-2">درآمد کل</p>
+                    <h3 class="text-2xl font-bold">${Number(kpis.total_revenue || 0).toLocaleString('fa-IR')}</h3>
+                </div>
+                <div class="glass rounded-3xl p-6 text-center">
+                    <i class="fas fa-cart-shopping text-3xl text-blue-300"></i>
+                    <p class="text-gray-400 mt-2">تعداد سفارش</p>
+                    <h3 class="text-2xl font-bold">${Number(kpis.total_orders || 0).toLocaleString('fa-IR')}</h3>
+                </div>
+                <div class="glass rounded-3xl p-6 text-center">
+                    <i class="fas fa-chart-line text-3xl text-purple-300"></i>
+                    <p class="text-gray-400 mt-2">میانگین ارزش سفارش</p>
+                    <h3 class="text-2xl font-bold">${Number(kpis.avg_order_value || 0).toLocaleString('fa-IR')}</h3>
+                </div>
+                <div class="glass rounded-3xl p-6 text-center">
+                    <i class="fas fa-users text-3xl text-pink-300"></i>
+                    <p class="text-gray-400 mt-2">مشتریان یکتا</p>
+                    <h3 class="text-2xl font-bold">${Number(kpis.unique_customers || 0).toLocaleString('fa-IR')}</h3>
+                </div>
+                <div class="glass rounded-3xl p-6 text-center">
+                    <i class="fas fa-coins text-3xl text-emerald-300"></i>
+                    <p class="text-gray-400 mt-2">سود خالص</p>
+                    <h3 class="text-2xl font-bold">${Number(kpis.total_profit || 0).toLocaleString('fa-IR')}</h3>
+                </div>
+            `;
+
+            let html = `<h3 class="text-2xl font-bold mb-4">🧠 بینش‌های هوشمند</h3>`;
+            textInsights.forEach(text => {
+                html += `<div class="glass rounded-2xl p-4 mb-3">${text}</div>`;
+            });
+            if (topProducts.length) {
+                html += `<h4 class="text-xl font-bold mt-6 mb-3">🏆 محصولات برتر</h4>`;
+                topProducts.forEach((item, i) => {
+                    html += `<div class="glass rounded-2xl p-3 flex justify-between mb-2"><span>${i+1}. ${item.name}</span><span>${Number(item.revenue).toLocaleString('fa-IR')}</span></div>`;
+                });
+            }
+            if (topCustomers.length) {
+                html += `<h4 class="text-xl font-bold mt-6 mb-3">👑 مشتریان برتر</h4>`;
+                topCustomers.forEach((item, i) => {
+                    html += `<div class="glass rounded-2xl p-3 flex justify-between mb-2"><span>${i+1}. ${item.name}</span><span>${Number(item.revenue).toLocaleString('fa-IR')}</span></div>`;
+                });
+            }
+            document.getElementById('insights-list').innerHTML = html;
+            cleanedDownloadUrl = data.download_url;
+        }
+
+        function downloadCleanedFile() {
+            if (cleanedDownloadUrl) window.open(cleanedDownloadUrl, "_blank");
+            else alert("فایل آماده نیست");
+        }
+
+        renderMapping();
+    </script>
+</body>
+</html>

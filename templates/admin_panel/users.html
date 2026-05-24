@@ -1,0 +1,39 @@
+{% extends 'admin_panel/base.html' %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold">👤 کاربران</h1>
+        <form method="get" class="flex gap-2">
+            <input type="text" name="q" value="{{ query }}" placeholder="جستجو..." class="bg-white/10 rounded-xl px-4 py-2 border border-white/20">
+            <button type="submit" class="btn-primary px-4 py-2 rounded-xl">جستجو</button>
+        </form>
+    </div>
+
+    <div class="card overflow-x-auto">
+        <table>
+            <thead>
+                <tr><th>ایمیل</th><th>شماره تلفن</th><th>تاریخ عضویت</th><th>تعداد گزارش</th><th>عملیات</th></tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.email|default:"-" }}</td>
+                    <td>{{ user.phone_number|default:"-" }}</td>
+                    <td>{{ user.date_joined|date:"Y/m/d" }}</td>
+                    <td>{{ user.report_count }}</td>
+                    <td class="flex gap-2">
+                        <a href="{% url 'admin_panel:user_detail' user.id %}" class="text-cyan-300">مشاهده</a>
+                        <form method="post" action="{% url 'admin_panel:delete_user' user.id %}" onsubmit="return confirm('حذف کاربر؟');">
+                            {% csrf_token %}
+                            <button type="submit" class="text-red-400">حذف</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center">کاربری یافت نشد</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

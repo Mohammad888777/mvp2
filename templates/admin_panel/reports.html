@@ -1,0 +1,43 @@
+{% extends 'admin_panel/base.html' %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between">
+        <h1 class="text-3xl font-bold">📄 همه گزارش‌ها</h1>
+        <form method="get" class="flex gap-2">
+            <input type="text" name="q" value="{{ query }}" placeholder="جستجو در نام فایل/ایمیل" class="bg-white/10 rounded-xl px-4 py-2">
+            <button type="submit" class="btn-primary px-4 py-2 rounded-xl">جستجو</button>
+        </form>
+    </div>
+    <div class="card overflow-x-auto">
+        <table class="min-w-full">
+            <thead>
+                <tr><th>نام فایل</th><th>کاربر</th><th>تاریخ</th><th>درآمد کل</th><th>دانلود فایل</th><th>عملیات</th></tr>
+            </thead>
+            <tbody>
+                {% for r in reports %}
+                <tr>
+                    <td>{{ r.filename }}</td>
+                    <td>{{ r.user.email|default:"مهمان" }}</td>
+                    <td>{{ r.created_at|date:"Y/m/d H:i" }}</td>
+                    <td>{{ r.insights.kpis.total_revenue|default:0|floatformat:0 }}</td>
+                    <td>
+                        <a href="/api/download-cleaned/{{ r.session_id }}" class="text-green-400 hover:text-green-300" target="_blank">
+                            <i class="fas fa-download"></i> دانلود
+                        </a>
+                    </td>
+                    <td class="flex gap-2">
+                        <a href="{% url 'admin_panel:report_detail' r.id %}" class="text-cyan-300">مشاهده</a>
+                        <form method="post" action="{% url 'admin_panel:delete_report' r.id %}" onsubmit="return confirm('حذف گزارش؟');">
+                            {% csrf_token %}
+                            <button type="submit" class="text-red-400">حذف</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center">گزارشی یافت نشد</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

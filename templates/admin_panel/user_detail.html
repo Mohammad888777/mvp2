@@ -1,0 +1,36 @@
+{% extends 'admin_panel/base.html' %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between">
+        <h1 class="text-3xl font-bold">👤 {{ user.email|default:user.id }}</h1>
+        <a href="{% url 'admin_panel:user_list' %}" class="text-cyan-300">← بازگشت</a>
+    </div>
+
+    <div class="card p-6 grid grid-cols-2 gap-4">
+        <div><span class="text-gray-400">ایمیل:</span> {{ user.email|default:"-" }}</div>
+        <div><span class="text-gray-400">شماره تلفن:</span> {{ user.phone_number|default:"-" }}</div>
+        <div><span class="text-gray-400">تاریخ عضویت:</span> {{ user.date_joined|date:"Y/m/d H:i" }}</div>
+        <div><span class="text-gray-400">تعداد گزارش:</span> {{ reports.count }}</div>
+        <div><span class="text-gray-400">مجموع درآمد (از تمام گزارش‌ها):</span> {{ total_revenue|floatformat:0|default:"0" }}</div>
+    </div>
+
+    <div class="card p-6">
+        <h2 class="text-xl font-bold mb-4">📁 گزارش‌های کاربر</h2>
+        <table>
+            <thead><tr><th>نام فایل</th><th>تاریخ آپلود</th><th>درآمد کل (در آن گزارش)</th><th>عملیات</th></tr></thead>
+            <tbody>
+                {% for r in reports %}
+                <tr>
+                    <td>{{ r.filename }}</td>
+                    <td>{{ r.created_at|date:"Y/m/d H:i" }}</td>
+                    <td>{{ r.insights.kpis.total_revenue|default:0|floatformat:0 }}</td>
+                    <td><a href="{% url 'admin_panel:report_detail' r.id %}" class="text-cyan-300">جزئیات</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-center">هیچ گزارشی وجود ندارد</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

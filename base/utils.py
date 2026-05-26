@@ -17,7 +17,13 @@ from typing import Dict, List, Any
 
 client = OpenAI(
     base_url='https://api.gapgpt.app/v1',
-    api_key='DlNlz3icgBGsHO9vGk0QUNUpXn5eHDIZ9pkfp3XCe1eZKRnA'
+    api_key='DlNlz3icgBGsHO9vGk0QUNUpXn5eHDIZ9pkfp3XCe1eZKRnA',
+    # api_key='NIe0KmgW06YNjMs1bLQt4VTICtdxoJUzgHnRpwxsiCRoFINf',
+
+
+    timeout=60.0,          # ۶۰ ثانیه
+    max_retries=2
+
 )
 
 ALLOWED_FIELDS = [
@@ -259,13 +265,14 @@ def detect_columns_with_ai(columns: list, sample_rows: list):
         )
 
         suggested = json.loads(response.choices[0].message.content)
+        sec_suggested = json.loads(response.choices[0].message.content)
 
         # اطمینان از اینکه همه ستون‌ها وجود دارند
         for col in columns:
             if col not in suggested or suggested[col] not in ALLOWED_FIELDS:
                 suggested[col] = "unknown"
 
-        return suggested
+        return suggested,sec_suggested
 
     except Exception as e:
         print("AI Column Detection Error:", e)

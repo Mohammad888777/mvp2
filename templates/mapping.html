@@ -41,6 +41,57 @@
       <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
             <br>
             <br>
+            <h1>Prompt:</h1>
+            <br>
+            <p style="padding: 8px;">
+                
+شما یک متخصص هوشمند نگاشت ستون‌های فروش هستید.
+
+ستون‌های موجود در فایل:
+{columns}
+<br>
+نمونه داده (۳ سطر اول):
+{json.dumps(safe_rows, ensure_ascii=False, indent=2)}
+<br>
+
+کار تو این است که **هر ستون** را به یکی از این دسته‌ها نگاشت کنی:
+{', '.join(ALLOWED_FIELDS)}
+<br>
+
+قوانین مهم:
+- فقط خروجی JSON بده، هیچ متن اضافی ننویس.
+- فرمت دقیق خروجی باید به این شکل باشد:
+{{
+  "نام ستون اول": "revenue",
+  "نام ستون دوم": "date",
+  "نام ستون سوم": "product",
+  ...
+}}
+
+<br>
+
+- اگر واقعاً هیچ تطابقی پیدا نکردی از "unknown" استفاده کن.
+- نام ستون‌ها را دقیقاً همان‌طور که هست بنویس (حساس به حروف کوچک و بزرگ).
+<br>
+
+مثال خوب:
+{{
+  "مبلغ فروش": "revenue",
+  "تاریخ سفارش": "date",
+  "نام مشتری": "customer",
+  "تعداد": "quantity",
+  "محصول": "product"
+}}
+            </p>
+            <br><br><br>
+            Response:
+
+            <br>    
+
+            {{sec_suggested}}
+            
+            <br><br>
+
             <form id="mappingForm">
                 <div id="mapping-fields" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
                     <!-- داینامیک پر می‌شود -->

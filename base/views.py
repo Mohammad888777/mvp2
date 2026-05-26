@@ -1,219 +1,3 @@
-# # core/views.py
-# import os
-# import uuid
-# import json
-# import pandas as pd
-# from django.shortcuts import render
-# from django.http import JsonResponse, FileResponse, HttpResponse
-# from django.views.decorators.csrf import csrf_exempt
-# from django.views.decorators.http import require_http_methods
-# from django.contrib.sessions.models import Session
-# from django.core.files.storage import default_storage
-# from django.core.files.base import ContentFile
-# from django.conf import settings
-
-# from .models import User, Report
-# from .forms import UploadFileForm, ProcessForm
-# from .utils import (
-#     read_excel_file, detect_columns_with_ai, detect_and_suggest_fix,
-#     generate_insights, clean_column_name, ALLOWED_FIELDS
-# )
-
-# # ------------------- صفحه اصلی -------------------
-# def home(request):
-#     return render(request, 'index.html')
-
-# # ------------------- API Login -------------------
-# @require_http_methods(["POST"])
-# @csrf_exempt
-# def api_login(request):
-#     import json
-#     data = json.loads(request.body)
-#     email = data.get('email')
-#     if not email:
-#         return JsonResponse({'error': 'ایمیل الزامی است'}, status=400)
-#     user, created = User.objects.get_or_create(email=email)
-#     request.session['user_id'] = str(user.id)
-#     request.session['email'] = user.email
-#     request.session['is_guest'] = False
-#     return JsonResponse({
-#         'success': True,
-#         'user_id': user.id,
-#         'email': user.email
-#     })
-
-# # ------------------- Guest Login -------------------
-# @require_http_methods(["POST"])
-# @csrf_exempt
-# def guest_login(request):
-#     request.session['is_guest'] = True
-#     request.session['guest_expire'] = pd.Timestamp.now().timestamp() + 3600
-#     return JsonResponse({'success': True, 'guest': True})
-
-# # ------------------- Get current user -------------------
-# def me(request):
-#     if request.session.get('is_guest'):
-#         expire = request.session.get('guest_expire')
-#         now = pd.Timestamp.now().timestamp()
-#         if expire and now > expire:
-#             request.session.flush()
-#             return JsonResponse({'authenticated': False})
-#         return JsonResponse({'authenticated': True, 'guest': True})
-#     if request.session.get('user_id'):
-#         return JsonResponse({
-#             'authenticated': True,
-#             'guest': False,
-#             'email': request.session.get('email'),
-#             'user_id': request.session.get('user_id')
-#         })
-#     return JsonResponse({'authenticated': False})
-
-# # ------------------- Logout -------------------
-# @require_http_methods(["POST"])
-# @csrf_exempt
-# def logout(request):
-#     request.session.flush()
-#     return JsonResponse({'success': True})
-
-# # ------------------- Upload -------------------
-# @require_http_methods(["POST"])
-# @csrf_exempt
-# def upload_file(request):
-#     # بررسی احراز هویت
-#     if not request.session.get('user_id') and not request.session.get('is_guest'):
-#         return JsonResponse({'error': 'Unauthorized'}, status=401)
-
-#     form = UploadFileForm(request.POST, request.FILES)
-#     if not form.is_valid():
-#         return JsonResponse({'error': 'فایل ارسال نشده'}, status=400)
-
-#     uploaded_file = request.FILES['file']
-#     content = uploaded_file.read()
-#     try:
-#         df = read_excel_file(content, uploaded_file.name)
-#     except Exception as e:
-#         return JsonResponse({'error': str(e)}, status=400)
-
-#     session_id = str(uuid.uuid4())
-#     # ذخیره دیتافریم به صورت pickle در media
-#     temp_path = os.path.join(settings.MEDIA_ROOT, f"{session_id}.pkl")
-#     os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-#     df.to_pickle(temp_path)
-
-#     sample_rows = df.head(3).to_dict(orient='records')
-#     suggested = detect_columns_with_ai(df.columns.tolist(), sample_rows)
-
-#     return JsonResponse({
-#         'session_id': session_id,
-#         'columns': df.columns.tolist(),
-#         'suggested_mapping': suggested
-#     })
-
-# # ------------------- Process -------------------
-# @require_http_methods(["POST"])
-# @csrf_exempt
-# def process_data(request):
-#     form = ProcessForm(request.POST)
-#     if not form.is_valid():
-#         return JsonResponse({'error': 'داده‌های نامعتبر'}, status=400)
-
-#     session_id = form.cleaned_data['session_id']
-#     mapping_str = form.cleaned_data['mapping']
-#     try:
-#         mapping_dict = json.loads(mapping_str)
-#     except:
-#         return JsonResponse({'error': 'mapping JSON نامعتبر'}, status=400)
-
-#     file_path = os.path.join(settings.MEDIA_ROOT, f"{session_id}.pkl")
-#     if not os.path.exists(file_path):
-#         return JsonResponse({'error': 'Session منقضی شده'}, status=400)
-
-#     df = pd.read_pickle(file_path)
-
-#     # پاکسازی نام ستون‌ها
-#     df.columns = [clean_column_name(col) for col in df.columns]
-
-#     # اصلاح داده‌ها
-#     issues_dict = detect_and_suggest_fix(df, mapping_dict)
-#     df_cleaned = issues_dict['df'].copy()
-
-#     ALLOWED_EXPORT_COLUMNS = {'date', 'product', 'customer', 'quantity', 'profit', 'revenue'}
-#     keep_columns = {}
-#     for original_col, target in mapping_dict.items():
-#         if target not in ALLOWED_EXPORT_COLUMNS:
-#             continue
-#         clean_col = clean_column_name(original_col)
-#         if clean_col in df_cleaned.columns:
-#             keep_columns[clean_col] = target
-#         elif original_col in df_cleaned.columns:
-#             keep_columns[original_col] = target
-
-#     existing_cols = [col for col in keep_columns.keys() if col in df_cleaned.columns]
-#     df_cleaned = df_cleaned[existing_cols].copy()
-#     df_cleaned.rename(columns=keep_columns, inplace=True)
-#     df_cleaned = df_cleaned.loc[:, ~df_cleaned.columns.duplicated()]
-
-#     cleaned_path = os.path.join(settings.MEDIA_ROOT, f"{session_id}_cleaned.xlsx")
-#     df_cleaned.to_excel(cleaned_path, index=False)
-
-#     final_mapping = {col: col for col in df_cleaned.columns}
-#     insights = generate_insights(df_cleaned, final_mapping)
-
-#     date_col = 'date' if 'date' in df_cleaned.columns else None
-#     rev_col = 'revenue' if 'revenue' in df_cleaned.columns else None
-#     chart_path = None  # اگر تابع تولید نمودار دارید، می‌توانید فعال کنید
-
-#     return JsonResponse({
-#         'insights': insights,
-#         'chart_url': None,
-#         'download_url': f'/api/download-cleaned/{session_id}'
-#     })
-
-# # ------------------- Download cleaned file -------------------
-# def download_cleaned(request, session_id):
-#     file_path = os.path.join(settings.MEDIA_ROOT, f"{session_id}_cleaned.xlsx")
-#     if not os.path.exists(file_path):
-#         return JsonResponse({'error': 'فایل پیدا نشد'}, status=404)
-#     return FileResponse(open(file_path, 'rb'), as_attachment=True, filename='cleaned_data.xlsx')
-
-# # ------------------- Health -------------------
-# def health(request):
-#     return JsonResponse({'status': 'ok'})
-
-
-
-
-
-
-
-# def mapping_page(request, session_id):
-#     """
-#     صفحه اختصاصی برای نگاشت ستون‌ها
-#     """
-#     # بررسی احراز هویت
-#     if not request.session.get('user_id') and not request.session.get('is_guest'):
-#         return JsonResponse({'error': 'Unauthorized'}, status=401)
-
-#     file_path = os.path.join(settings.MEDIA_ROOT, f"{session_id}.pkl")
-#     if not os.path.exists(file_path):
-#         return render(request, 'error.html', {'message': 'جلسه منقضی شده یا فایل وجود ندارد'})
-
-#     df = pd.read_pickle(file_path)
-#     sample_rows = df.head(3).to_dict(orient='records')
-#     suggested = detect_columns_with_ai(df.columns.tolist(), sample_rows)
-
-#     context = {
-#         'session_id': session_id,
-#         'columns': df.columns.tolist(),
-#         'suggested_mapping': suggested,
-#         'allowed_fields': ['revenue', 'quantity', 'profit', 'date', 'customer', 'product', 'status', 'unknown']
-#     }
-#     return render(request, 'mapping.html', context)
-
-
-
-
-
 import os
 import uuid
 import json
@@ -324,7 +108,7 @@ def upload_file(request):
     request.session['last_filename'] = uploaded_file.name
 
     sample_rows = df.head(3).to_dict(orient='records')
-    suggested = detect_columns_with_ai(df.columns.tolist(), sample_rows)
+    suggested,sec_suggested = detect_columns_with_ai(df.columns.tolist(), sample_rows)
 
     return JsonResponse({
         'session_id': session_id,
@@ -345,13 +129,14 @@ def mapping_page(request, session_id):
 
     df = pd.read_pickle(file_path)
     sample_rows = df.head(3).to_dict(orient='records')
-    suggested = detect_columns_with_ai(df.columns.tolist(), sample_rows)
+    suggested,sec_suggested = detect_columns_with_ai(df.columns.tolist(), sample_rows)
 
     context = {
         'session_id': session_id,
         'columns': df.columns.tolist(),
         'suggested_mapping': suggested,
-        'allowed_fields': ALLOWED_FIELDS
+        'allowed_fields': ALLOWED_FIELDS,
+        "sec_suggested":sec_suggested
     }
     return render(request, 'mapping.html', context)
 

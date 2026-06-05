@@ -25,5 +25,5 @@ urlpatterns = [
 
 
 
-    path('health', views.health, name='health'),
+    
 ]

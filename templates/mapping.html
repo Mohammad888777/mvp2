@@ -39,58 +39,20 @@
         <div class="glass rounded-[35px] p-10 neon">
             <h1 class="text-4xl font-black gradient-text mb-8 text-center">🔗 نگاشت ستون‌ها به فیلدهای استاندارد</h1>
       <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
-            <br>
-            <br>
-            <h1>Prompt:</h1>
-            <br>
-            <p style="padding: 8px;">
-                
-شما یک متخصص هوشمند نگاشت ستون‌های فروش هستید.
+     
 
-ستون‌های موجود در فایل:
-{columns}
-<br>
-نمونه داده (۳ سطر اول):
-{json.dumps(safe_rows, ensure_ascii=False, indent=2)}
-<br>
 
-کار تو این است که **هر ستون** را به یکی از این دسته‌ها نگاشت کنی:
-{', '.join(ALLOWED_FIELDS)}
-<br>
+      <!-- بعد از تگ h1 یا قبل از فرم mapping -->
+{% if sheet_info and sheet_info.warning %}
+<div class="bg-yellow-600/30 border border-yellow-500 rounded-2xl p-4 mb-6 text-yellow-200 text-right">
+    <i class="fas fa-exclamation-triangle ml-2"></i>
+    {{ sheet_info.warning }}
+    {% if sheet_info.has_multiple_sheets %}
+        <br><small>شیت انتخاب‌شده: {{ sheet_info.selected_sheet }}</small>
+    {% endif %}
+</div>
+{% endif %}
 
-قوانین مهم:
-- فقط خروجی JSON بده، هیچ متن اضافی ننویس.
-- فرمت دقیق خروجی باید به این شکل باشد:
-{{
-  "نام ستون اول": "revenue",
-  "نام ستون دوم": "date",
-  "نام ستون سوم": "product",
-  ...
-}}
-
-<br>
-
-- اگر واقعاً هیچ تطابقی پیدا نکردی از "unknown" استفاده کن.
-- نام ستون‌ها را دقیقاً همان‌طور که هست بنویس (حساس به حروف کوچک و بزرگ).
-<br>
-
-مثال خوب:
-{{
-  "مبلغ فروش": "revenue",
-  "تاریخ سفارش": "date",
-  "نام مشتری": "customer",
-  "تعداد": "quantity",
-  "محصول": "product"
-}}
-            </p>
-            <br><br><br>
-            Response:
-
-            <br>    
-
-            {{sec_suggested}}
-            
-            <br><br>
 
             <form id="mappingForm">
                 <div id="mapping-fields" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">

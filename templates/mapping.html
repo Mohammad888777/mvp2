@@ -43,15 +43,24 @@
 
 
       <!-- بعد از تگ h1 یا قبل از فرم mapping -->
-{% if sheet_info and sheet_info.warning %}
-<div class="bg-yellow-600/30 border border-yellow-500 rounded-2xl p-4 mb-6 text-yellow-200 text-right">
-    <i class="fas fa-exclamation-triangle ml-2"></i>
-    {{ sheet_info.warning }}
-    {% if sheet_info.has_multiple_sheets %}
-        <br><small>شیت انتخاب‌شده: {{ sheet_info.selected_sheet }}</small>
-    {% endif %}
-</div>
-{% endif %}
+                {% if sheet_info and sheet_info.warning %}
+                <div class="bg-yellow-600/30 border border-yellow-500 rounded-2xl p-4 mb-6 text-yellow-200 text-right">
+                    <i class="fas fa-exclamation-triangle ml-2"></i>
+                    {{ sheet_info.warning }}
+                    {% if sheet_info.has_multiple_sheets %}
+                        <br><small>شیت انتخاب‌شده: {{ sheet_info.selected_sheet }}</small>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+
+                {% if sheet_info.too_many_columns %}
+                <div class="bg-yellow-600/30 border border-yellow-500 rounded-2xl p-4 mb-6 text-yellow-200 text-right">
+                    <i class="fas fa-exclamation-triangle ml-2"></i>
+                    تعداد ستون‌های فایل زیاد است ({{ sheet_info.too_many_columns_count }} ستون). لطفاً فقط ستون‌های مورد نیاز را به نقش‌های استاندارد نگاشت کنید.
+                </div>
+                {% endif %}
+
 
 
             <form id="mappingForm">

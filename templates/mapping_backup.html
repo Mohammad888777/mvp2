@@ -32,39 +32,41 @@
             transform: translateY(-6px);
             box-shadow: 0 0 25px rgba(59, 130, 246, 0.25);
         }
-        /* استایل مودال */
-        .modal-overlay {
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(4px);
-        }
     </style>
 </head>
 <body class="p-8">
     <div class="max-w-4xl mx-auto">
         <div class="glass rounded-[35px] p-10 neon">
             <h1 class="text-4xl font-black gradient-text mb-8 text-center">🔗 نگاشت ستون‌ها به فیلدهای استاندارد</h1>
-            <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
+      <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
+     
 
-            <!-- نمایش هشدارهای sheet_info -->
-            {% if sheet_info and sheet_info.warning %}
-            <div class="bg-yellow-600/30 border border-yellow-500 rounded-2xl p-4 mb-6 text-yellow-200 text-right">
-                <i class="fas fa-exclamation-triangle ml-2"></i>
-                {{ sheet_info.warning }}
-                {% if sheet_info.has_multiple_sheets %}
-                    <br><small>شیت انتخاب‌شده: {{ sheet_info.selected_sheet }}</small>
+
+      <!-- بعد از تگ h1 یا قبل از فرم mapping -->
+                {% if sheet_info and sheet_info.warning %}
+                <div class="bg-yellow-600/30 border border-yellow-500 rounded-2xl p-4 mb-6 text-yellow-200 text-right">
+                    <i class="fas fa-exclamation-triangle ml-2"></i>
+                    {{ sheet_info.warning }}
+                    {% if sheet_info.has_multiple_sheets %}
+                        <br><small>شیت انتخاب‌شده: {{ sheet_info.selected_sheet }}</small>
+                    {% endif %}
+                </div>
                 {% endif %}
-            </div>
-            {% endif %}
 
-            {% if sheet_info.too_many_columns %}
-            <div class="bg-yellow-600/30 border border-yellow-500 rounded-2xl p-4 mb-6 text-yellow-200 text-right">
-                <i class="fas fa-exclamation-triangle ml-2"></i>
-                تعداد ستون‌های فایل زیاد است ({{ sheet_info.too_many_columns_count }} ستون). لطفاً فقط ستون‌های مورد نیاز را به نقش‌های استاندارد نگاشت کنید.
-            </div>
-            {% endif %}
+
+                {% if sheet_info.too_many_columns %}
+                <div class="bg-yellow-600/30 border border-yellow-500 rounded-2xl p-4 mb-6 text-yellow-200 text-right">
+                    <i class="fas fa-exclamation-triangle ml-2"></i>
+                    تعداد ستون‌های فایل زیاد است ({{ sheet_info.too_many_columns_count }} ستون). لطفاً فقط ستون‌های مورد نیاز را به نقش‌های استاندارد نگاشت کنید.
+                </div>
+                {% endif %}
+
+
 
             <form id="mappingForm">
-                <div id="mapping-fields" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10"></div>
+                <div id="mapping-fields" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
+                    <!-- داینامیک پر می‌شود -->
+                </div>
                 <button type="submit" class="space-btn w-full py-5 rounded-3xl text-2xl font-black">
                     ✨ تولید گزارش هوشمند
                 </button>
@@ -75,8 +77,11 @@
         </div>
 
         <div id="result-section" class="hidden mt-10 glass rounded-[35px] p-10">
+        <br>
+
             <a href="/" class="space-btn px-4 py-2 rounded-xl">← صفحه اصلی</a>
-            <br><br>
+        <br>
+        <br>
             <h2 class="text-3xl font-black gradient-text mb-6">📊 نتایج تحلیل</h2>
             <div id="kpi-cards" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"></div>
             <div id="insights-list"></div>
@@ -96,16 +101,6 @@
 
         let cleanedDownloadUrl = null;
 
-        // نام‌های فارسی برای نمایش در خلاصه
-        const fieldPersian = {
-            'amount': 'مبلغ (amount)',
-            'date': 'تاریخ (date)',
-            'customer': 'مشتری (customer)',
-            'product': 'محصول (product)',
-            'status': 'وضعیت (status)',
-            'unknown': 'نامشخص (unknown)'
-        };
-
         function renderMapping() {
             const container = document.getElementById('mapping-fields');
             container.innerHTML = '';
@@ -114,7 +109,7 @@
                 div.className = "glass rounded-2xl p-5 flex items-center justify-between card-hover";
                 div.innerHTML = `
                     <span class="font-bold text-lg">${col}</span>
-                    <select name="mapping[${col}]" class="bg-purple-500 rounded-xl px-4 py-3">
+                    <select  name="mapping[${col}]" class="bg-purple-500 rounded-xl px-4 py-3">
                         ${allowedFields.map(f => `<option class="bg-purple" value="${f}" ${suggestedMapping[col] === f ? 'selected' : ''}>${f}</option>`).join('')}
                     </select>
                 `;
@@ -122,54 +117,16 @@
             });
         }
 
-        // ایجاد مودال به صورت داینامیک
-        let confirmModal = null;
-        function createModal() {
-            if (document.getElementById('confirmModal')) return;
-            const modalDiv = document.createElement('div');
-            modalDiv.id = 'confirmModal';
-            modalDiv.className = 'fixed inset-0 modal-overlay flex items-center justify-center z-50 hidden';
-            modalDiv.innerHTML = `
-                <div class="glass rounded-3xl p-8 max-w-2xl w-full mx-4 shadow-2xl">
-                    <h3 class="text-2xl font-bold mb-4 text-center">🔍 تأیید نگاشت ستون‌ها</h3>
-                    <div id="summaryList" class="max-h-96 overflow-y-auto mb-6 space-y-2"></div>
-                    <div class="flex justify-center gap-4">
-                        <button id="cancelBtn" class="px-6 py-3 rounded-xl bg-gray-600 hover:bg-gray-500 transition">اصلاح</button>
-                        <button id="confirmBtn" class="px-6 py-3 rounded-xl space-btn">تأیید و پردازش</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modalDiv);
-            confirmModal = document.getElementById('confirmModal');
-            // bind events
-            document.getElementById('cancelBtn').onclick = () => {
-                confirmModal.classList.add('hidden');
-            };
-            document.getElementById('confirmBtn').onclick = () => {
-                confirmModal.classList.add('hidden');
-                // ارسال درخواست با mapping ذخیره شده
-                sendProcessRequest(window.pendingMapping);
-            };
-        }
-
-        function showConfirmModal(mapping) {
-            if (!confirmModal) createModal();
-            window.pendingMapping = mapping;
-            const summaryDiv = document.getElementById('summaryList');
-            summaryDiv.innerHTML = '';
-            for (const [col, role] of Object.entries(mapping)) {
-                const roleShow = fieldPersian[role] || role;
-                summaryDiv.innerHTML += `
-                    <div class="glass rounded-xl p-3 flex justify-between items-center">
-                        <span class="font-mono text-sm">${col}</span>
-                        <span class="text-cyan-300">→ ${roleShow}</span>
-                    </div>
-                `;
+        document.getElementById('mappingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const mapping = {};
+            for (let [key, value] of formData.entries()) {
+                // key به شکل "mapping[col_name]" است
+                const colName = key.match(/\[(.*?)\]/)[1];
+                mapping[colName] = value;
             }
-            confirmModal.classList.remove('hidden');
-        }
 
-        async function sendProcessRequest(mapping) {
             document.getElementById('loading').classList.remove('hidden');
             try {
                 const res = await fetch('/api/process', {
@@ -188,19 +145,6 @@
             } finally {
                 document.getElementById('loading').classList.add('hidden');
             }
-        }
-
-        // هندل سابمیت فرم
-        document.getElementById('mappingForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const mapping = {};
-            for (let [key, value] of formData.entries()) {
-                const colName = key.match(/\[(.*?)\]/)[1];
-                mapping[colName] = value;
-            }
-            // نمایش مودال تأیید
-            showConfirmModal(mapping);
         });
 
         function showResults(data) {
@@ -212,6 +156,7 @@
             const topProducts = data.insights.top_products || [];
             const topCustomers = data.insights.top_customers || [];
 
+            // کارت‌های KPI
             document.getElementById('kpi-cards').innerHTML = `
                 <div class="glass rounded-3xl p-6 text-center">
                     <i class="fas fa-sack-dollar text-3xl text-cyan-300"></i>
@@ -266,7 +211,6 @@
         }
 
         renderMapping();
-        createModal();  // ایجاد مودال در ابتدا
     </script>
 </body>
 </html>

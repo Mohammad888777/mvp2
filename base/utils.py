@@ -74,7 +74,9 @@ def clean_column_name(col: str) -> str:
 
 
 
-# رسیدگی به داده‌های ناهماهنگ (ragged data) و هشدار تعداد ستون‌ها
+
+
+#  سناریوی حذف خودکار ردیف‌های توضیحات ابتدایی
 
 def read_excel_file(file_content: bytes, filename: str, force_header=None):
     """
@@ -84,7 +86,9 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
     - وجود header یا نبودن آن (معیار: اگر ≥30% مقادیر ردیف اول غیرعددی باشند، هدر است)
     - چندین شیت در Excel (انتخاب شیت با بیشترین داده)
     - فایل‌های بدون پسوند یا پسوند اشتباه (با magic bytes)
-    - فایل‌های خراب (corrupted)
+    - فایل‌های خراب (corrupted) و دارای رمز عبور
+    - حذف خودکار ستون‌های کاملاً خالی
+    - حذف خودکار ردیف‌های توضیحات ابتدایی (نه هدر و نه داده)
     - پاکسازی نام ستون‌ها: حذف کاراکترهای نامرئی، جایگزینی کاراکترهای غیرمجاز با _
     - محدود کردن طول نام ستون‌ها به 50 کاراکتر (truncate با ... در انتها)
     - تغییر نام خودکار هدرهای تکراری (اضافه شدن _1, _2)
@@ -104,20 +108,15 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
     def sanitize_column_name(col: str, col_index: int = None) -> str:
         if not isinstance(col, str):
             col = str(col)
-        # حذف کاراکترهای کنترلی و فاصله‌های نامرئی
         col = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', col)
         col = col.replace('\xa0', ' ').replace('\u200c', '').replace('\u200e', '').replace('\u200f', '')
         col = re.sub(r'\s+', ' ', col)
         col = col.strip()
-        # جایگزینی کاراکترهای غیرمجاز با زیرخط
         invalid_chars = r'[\\/*?:\[\]{}|<>+=;,.()&%$#@!~\t\n]'
         col = re.sub(invalid_chars, '_', col)
-        # حذف زیرخط‌های تکراری و حاشیه‌ای
         col = re.sub(r'_+', '_', col).strip('_')
-        # محدود کردن طول به 50 کاراکتر
         if len(col) > 50:
             col = col[:50] + '...'
-        # اگر نام خالی شد، نام خودکار بساز
         if not col:
             if col_index is not None:
                 col = f"Column_{col_index+1}"
@@ -129,11 +128,6 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
     # 0.1 تابع کمکی برای padding داده‌های ناهماهنگ
     # ------------------------------------------
     def fix_ragged_rows(df: pd.DataFrame, expected_cols: int) -> tuple:
-        """
-        بررسی و اصلاح ردیف‌هایی که تعداد ستون‌های آنها با expected_cols برابر نیست.
-        ردیف‌های کوتاه‌تر با NaN پر می‌شوند، ردیف‌های بلندتر بریده می‌شوند.
-        برگرداندن (df_اصلاح شده, تعداد_ردیف‌های_اصلاح‌شده)
-        """
         fixed_rows = 0
         new_rows = []
         for idx, row in df.iterrows():
@@ -141,10 +135,8 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
             if len(row_list) != expected_cols:
                 fixed_rows += 1
                 if len(row_list) < expected_cols:
-                    # اضافه کردن NaN به انتها
                     row_list.extend([np.nan] * (expected_cols - len(row_list)))
                 else:
-                    # بریدن ردیف‌های بلندتر
                     row_list = row_list[:expected_cols]
                 new_rows.append(row_list)
             else:
@@ -155,7 +147,31 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
         return df, 0
 
     # ------------------------------------------
-    # 1. تشخیص نوع فایل از روی محتوا (magic bytes) اگر پسوند معتبر نباشد
+    # 0.2 تابع کمکی برای حذف ردیف‌های توضیحات ابتدایی
+    # ------------------------------------------
+    def remove_description_rows(df: pd.DataFrame) -> tuple:
+        description_keywords = ['گزارش', 'شرکت', 'تاریخ', 'لیست', 'فروش', 'سال', 'عنوان', 
+                                'شرح', 'توضیحات', 'مشتری', 'محصول', 'انبار', 'کد', 'مدیریت']
+        removed = 0
+        while len(df) > 0:
+            first_row = df.iloc[0].astype(str)
+            non_empty = [v for v in first_row if v.strip() != '' and v.lower() not in ['nan', 'none']]
+            # معیار 1: خیلی کم بودن ستون‌های غیر خالی (<=2)
+            if len(non_empty) <= 2:
+                df = df.iloc[1:].reset_index(drop=True)
+                removed += 1
+                continue
+            # معیار 2: ترکیب رشته‌ای ردیف شامل کلمات کلیدی و ستون‌های غیر خالی کم (<5)
+            first_text = ' '.join(first_row).lower()
+            if any(keyword in first_text for keyword in description_keywords) and len(non_empty) <= 5:
+                df = df.iloc[1:].reset_index(drop=True)
+                removed += 1
+                continue
+            break
+        return df, removed
+
+    # ------------------------------------------
+    # 1. تشخیص نوع فایل از روی محتوا (magic bytes)
     # ------------------------------------------
     ext = filename.lower().split('.')[-1] if '.' in filename else ''
     allowed_extensions = ['xlsx', 'xls', 'csv']
@@ -171,7 +187,7 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                 sample = file_content[:1000].decode('utf-8', errors='ignore')
                 if any(c in sample for c in [',', ';', '\t']) and not any(c in sample for c in ['\x00', '\x01']):
                     detected_type = 'csv'
-            except: 
+            except:
                 pass
         if detected_type is None:
             raise ValueError("فرمت فایل قابل تشخیص نیست. لطفاً فایل Excel یا CSV معتبر آپلود کنید.")
@@ -187,7 +203,8 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
         "empty_headers_filled": False,
         "truncated_headers": False,
         "ragged_rows_fixed": False,
-        "too_many_columns": False
+        "too_many_columns": False,
+        "dropped_empty_columns": []
     }
 
     try:
@@ -215,7 +232,6 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                 used_sep = ','
                 sheet_info["warning"] = "Encoding نامشخص، ممکن است کاراکترها درست نمایش داده نشوند."
 
-            # تشخیص delimiter اگر تعداد ستون‌ها کمتر از ۲ باشد
             if len(df.columns) < 2:
                 possible_seps = [',', ';', '\t', '|']
                 for sep in possible_seps:
@@ -228,6 +244,11 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                             break
                     except:
                         continue
+
+            # حذف ردیف‌های توضیحات ابتدایی
+            df, removed_rows = remove_description_rows(df)
+            if removed_rows > 0:
+                sheet_info["warning"] = (sheet_info["warning"] or "") + f" | {removed_rows} ردیف توضیحات ابتدایی حذف شدند."
 
             # تشخیص هدر (اگر force_header تعیین نشده باشد)
             if force_header is None and not df.empty:
@@ -242,15 +263,12 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                 if ratio_non_numeric >= 0.3:
                     sheet_info["header_detected"] = True
                 else:
-                    # دوباره بخوان بدون هدر
                     df = pd.read_csv(io.BytesIO(file_content), encoding=used_encoding,
                                      sep=used_sep, header=None)
                     sheet_info["header_detected"] = False
                     sheet_info["warning"] = (sheet_info["warning"] or "") + " | فایل بدون هدر تشخیص داده شد. ردیف اول به عنوان داده در نظر گرفته شد."
 
             sheet_info["selected_sheet"] = "CSV File"
-
-            # ========== رسیدگی به داده‌های ناهماهنگ (ragged rows) ==========
             expected_cols = len(df.columns)
             df, ragged_count = fix_ragged_rows(df, expected_cols)
             if ragged_count > 0:
@@ -260,12 +278,14 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
         # ------------------------------------------
         # 3. خواندن فایل Excel
         # ------------------------------------------
-        else:  # xlsx یا xls
+        else:
             try:
                 xl = pd.ExcelFile(io.BytesIO(file_content))
             except Exception as e:
                 error_msg = str(e).lower()
-                if any(kw in error_msg for kw in ["bad zip file", "not a zip file", "unsupported format", "corrupted", "truncated"]):
+                if any(keyword in error_msg for keyword in ["password", "encrypted", "protected"]):
+                    raise ValueError("فایل Excel با رمز عبور محافظت می‌شود. لطفاً رمز عبور را حذف کرده و دوباره آپلود کنید.")
+                elif any(keyword in error_msg for keyword in ["bad zip file", "not a zip file", "unsupported format", "corrupted", "truncated"]):
                     raise ValueError("فایل Excel آسیب دیده یا خراب است. لطفاً فایل دیگری را امتحان کنید.")
                 raise ValueError(f"خطا در خواندن فایل Excel: {str(e)}")
 
@@ -274,7 +294,6 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
             if len(sheet_names) > 1:
                 sheet_info["has_multiple_sheets"] = True
 
-            # انتخاب شیت با حداقل ۲ ردیف (هدر + داده)
             df = None
             selected_sheet = None
             for sheet in sheet_names:
@@ -289,6 +308,11 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                 selected_sheet = sheet_names[0]
                 sheet_info["warning"] = "هشدار: شیت انتخاب شده فقط شامل هدر است یا داده بسیار کمی دارد."
             sheet_info["selected_sheet"] = selected_sheet
+
+            # حذف ردیف‌های توضیحات ابتدایی
+            df, removed_rows = remove_description_rows(df)
+            if removed_rows > 0:
+                sheet_info["warning"] = (sheet_info["warning"] or "") + f" | {removed_rows} ردیف توضیحات ابتدایی حذف شدند."
 
             # تشخیص هدر برای Excel (≥30% غیرعددی)
             if force_header is None and not df.empty:
@@ -308,7 +332,6 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                     sheet_info["header_detected"] = False
                     sheet_info["warning"] = (sheet_info["warning"] or "") + " | فایل بدون هدر تشخیص داده شد. ردیف اول به عنوان داده در نظر گرفته شد."
 
-            # بررسی ناهماهنگی در Excel (کمتر محتمل اما ممکن است)
             expected_cols = len(df.columns)
             df, ragged_count = fix_ragged_rows(df, expected_cols)
             if ragged_count > 0:
@@ -316,12 +339,35 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                 sheet_info["warning"] = (sheet_info["warning"] or "") + f" | {ragged_count} ردیف دارای تعداد ستون ناهماهنگ بودند و با NaN اصلاح شدند."
 
     except Exception as e:
-        if "آسیب دیده" in str(e) or "خالی است" in str(e):
+        if "آسیب دیده" in str(e) or "خالی است" in str(e) or "رمز عبور" in str(e):
             raise
         raise ValueError(f"خطا در خواندن فایل: {str(e)}")
 
     # ------------------------------------------
-    # 4. پاکسازی نهایی و نام‌گذاری ستون‌ها
+    # 4. حذف ستون‌های کاملاً خالی
+    # ------------------------------------------
+    empty_cols = []
+    for col in df.columns:
+        if df[col].isna().all():
+            empty_cols.append(col)
+        elif df[col].dtype == 'object':
+            non_null = df[col].dropna()
+            if len(non_null) == 0:
+                empty_cols.append(col)
+            else:
+                all_empty = all(str(x).strip() == '' for x in non_null)
+                if all_empty:
+                    empty_cols.append(col)
+    if empty_cols:
+        df = df.drop(columns=empty_cols)
+        sheet_info["dropped_empty_columns"] = empty_cols
+        sheet_info["warning"] = (sheet_info.get("warning", "") + 
+                                 f" | {len(empty_cols)} ستون کاملاً خالی حذف شدند: {', '.join(empty_cols[:5])}{'...' if len(empty_cols)>5 else ''}")
+        if df.empty or len(df.columns) == 0:
+            raise ValueError("فایل فاقد داده معتبر است (همه ستون‌ها خالی بودند).")
+
+    # ------------------------------------------
+    # 5. پاکسازی نهایی و نام‌گذاری ستون‌ها
     # ------------------------------------------
     if df.empty or len(df) == 0:
         raise ValueError("فایل خالی است یا داده‌ای ندارد.")
@@ -330,14 +376,12 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
 
     df = df.dropna(how='all').reset_index(drop=True)
 
-    # ========== هشدار در صورت تعداد ستون‌های زیاد ==========
     column_count = len(df.columns)
     if column_count > 15:
         sheet_info["too_many_columns"] = True
         sheet_info["warning"] = (sheet_info["warning"] or "") + f" | تعداد ستون‌های فایل زیاد است ({column_count} ستون). لطفاً فقط ستون‌های مهم را نگاشت کنید."
 
     if sheet_info.get("header_detected", True):
-        # ========== الف) پاکسازی و truncate نام ستون‌ها ==========
         original_names = df.columns.tolist()
         new_names = []
         truncated_occurred = False
@@ -351,7 +395,6 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
             sheet_info["truncated_headers"] = True
             sheet_info["warning"] = (sheet_info["warning"] or "") + " | برخی هدرها به دلیل طول زیاد truncated شدند (محدودیت 50 کاراکتر)."
 
-        # ========== ب) شناسایی و نام‌گذاری هدرهای خالی ==========
         cols = df.columns.tolist()
         empty_found = False
         for i, col in enumerate(cols):
@@ -363,7 +406,6 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
             sheet_info["empty_headers_filled"] = True
             sheet_info["warning"] = (sheet_info["warning"] or "") + " | هدرهای خالی با نام‌های خودکار (Column_1, Column_2, ...) پر شدند."
 
-        # ========== ج) تغییر نام خودکار هدرهای تکراری ==========
         cols = df.columns.tolist()
         seen = {}
         new_cols = []
@@ -383,28 +425,11 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
             sheet_info["warning"] = (sheet_info["warning"] or "") + " | هدرهای تکراری به صورت خودکار تغییر نام یافتند (اضافه شدن _1, _2)."
 
     else:
-        # فایل بدون هدر: تولید نام ستون‌های ساده انگلیسی
         df.columns = [f"Col_{i+1}" for i in range(len(df.columns))]
         sheet_info["generated_columns"] = True
         sheet_info["warning"] = (sheet_info["warning"] or "") + " | نام ستون‌ها به صورت خودکار Col_1, Col_2,... تنظیم شد."
 
     return df, sheet_info
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -427,42 +452,6 @@ def detect_columns_with_ai(columns: list, sample_rows: list):
         for row in sample_rows[:5]   # بیشتر نمونه داده = دقت بالاتر
     ]
      
-#     prompt = f"""
-# تو یک حسابدار ارشد و متخصص بسیار باتجربه تحلیل فایل‌های فروش و تراکنش‌های ایرانی هستی با بیش از ۱۵ سال تجربه.
-
-# **ستون‌های فایل:**
-# {columns}
-
-# **نمونه داده (۵ ردیف اول):**
-# {json.dumps(safe_rows, ensure_ascii=False, indent=2)}
-
-# **فیلدهای استاندارد مورد قبول:**
-# {', '.join(ALLOWED_FIELDS)}
-
-# ### وظیفه تو تشخیص هوشمندانه مثل یک انسان واقعی است:
-# - **amount**: ستون اصلی مبلغ فروش، فی فروش، جمع فاکتور، درآمد، پرداخت و ...
-# - **date**: ستون تاریخ، سال، ماه، تاریخ تراکنش، سال فروش و ...
-# - **customer**: ستون نام مشتری، کشور مشتری، شهر، نام خریدار، کد مشتری، منطقه و ...
-# - **product**: نام محصول، کالا، شرح کالا، کد محصول و ...
-# - **status**: وضعیت، نوع، بخش، دولتی/خصوصی، پروژه و ...
-
-# **قوانین طلایی و بسیار مهم:**
-# - برای هر فیلد فقط **بهترین و منطقی‌ترین** ستون را انتخاب کن.
-# - اگر چند ستون مشابه بود، قوی‌ترین و اصلی‌ترین را انتخاب کن و بقیه را "unknown" بگذار.
-# - از زمینه نمونه داده‌ها استفاده کن (مثلاً "کشور" در فایل فروش معمولاً معادل Customer Location است → customer).
-# - اگر ستونی به شدت شبیه یکی از فیلدها بود اما دقیق نبود، باز هم هوشمندانه تصمیم بگیر.
-# - هدف: دقت نزدیک به ۱۰۰٪ مثل یک انسان متخصص.
-
-# **خروجی فقط JSON خالی بدون هیچ توضیح اضافی:**
-# {{
-#   "نام ستون دقیق": "amount",
-#   "نام ستون دقیق": "date",
-#   ...
-# }}
-
-# حالا با دقت بالا و هوش کامل نگاشت را انجام بده.
-# """
-
     prompt = f"""
 **ستون‌های فایل (اسم‌ها هر چیزی می‌توانند باشند):**
 {columns}
@@ -555,13 +544,12 @@ def detect_columns_with_ai(columns: list, sample_rows: list):
 
 
 
+
+
+
 # =========================
 # Detect & Fix Missing Data (نسخه مقاوم)
 # =========================
-
-
-
-
 def detect_and_suggest_fix(df: pd.DataFrame, mapping: dict):
     df = df.copy()
     issues = []
@@ -666,69 +654,7 @@ def detect_and_suggest_fix(df: pd.DataFrame, mapping: dict):
 
 
 
-# =========================
-# Generate Insights (دقیق MVP)
-# =========================
-# def generate_insights(df: pd.DataFrame, mapping: dict):
-#     amount_col = next((k for k, v in mapping.items() if v == "amount"), None)
-#     date_col = next((k for k, v in mapping.items() if v == "date"), None)
-#     cust_col = next((k for k, v in mapping.items() if v == "customer"), None)
-#     prod_col = next((k for k, v in mapping.items() if v == "product"), None)
-
-#     insights = {
-#         "kpis": {},
-#         "text_insights": [],
-#         "top_products": [],
-#         "repeat_rate": 0
-#     }
-
-#     # KPI پایه
-#     if amount_col:
-#         revenues = pd.to_numeric(df[amount_col].apply(fa_to_en), errors='coerce').dropna()
-#         if not revenues.empty:
-#             insights["kpis"].update({
-#                 "total_revenue": float(revenues.sum()),
-#                 "total_orders": int(len(revenues)),
-#                 "avg_order_value": float(revenues.mean())
-#             })
-
-#     if cust_col:
-#         insights["kpis"]["unique_customers"] = int(df[cust_col].nunique())
-
-#     # Repeat Customers
-#     if cust_col and amount_col:
-#         valid = df[[cust_col, amount_col]].dropna()
-#         repeat = valid.groupby(cust_col).size()
-#         repeat_rate = (repeat > 1).mean() * 100 if not repeat.empty else 0
-#         insights["repeat_rate"] = round(repeat_rate, 1)
-#         insights["text_insights"].append(f"🔄 {repeat_rate:.1f}% مشتریان تکراری هستند")
-
-#     # Best Product
-#     if prod_col and amount_col:
-#         temp = df[[prod_col, amount_col]].copy()
-#         temp[amount_col] = pd.to_numeric(temp[amount_col].apply(fa_to_en), errors='coerce')
-#         top = temp.groupby(prod_col)[amount_col].sum().nlargest(5)
-#         insights["top_products"] = [{"name": str(name), "revenue": float(val)} for name, val in top.items()]
-#         if not top.empty:
-#             insights["text_insights"].append(f"🏆 پرفروش‌ترین: <b>{top.index[0]}</b>")
-
-#     # Best Day + Trend
-#     if date_col and amount_col:
-#         df_date = df.copy()
-#         df_date[date_col] = pd.to_datetime(df_date[date_col], errors='coerce')
-#         daily = df_date.groupby(df_date[date_col].dt.date)[amount_col].sum()
-#         if not daily.empty:
-#             best_day = daily.idxmax()
-#             insights["text_insights"].append(f"📅 بهترین روز فروش: <b>{best_day}</b>")
-
-#     if not insights["text_insights"]:
-#         insights["text_insights"].append("داده کافی برای تحلیل عمیق وجود ندارد.")
-
-#     return insights
-
-
-
-
+# در صورت نبودن ستون amount
 def generate_insights(df: pd.DataFrame, mapping: dict):
     amount_col = next((k for k, v in mapping.items() if v == "amount"), None)
     date_col = next((k for k, v in mapping.items() if v == "date"), None)
@@ -742,8 +668,14 @@ def generate_insights(df: pd.DataFrame, mapping: dict):
         "repeat_rate": 0
     }
 
-    # KPI پایه
-    if amount_col:
+    # هشدار در صورت نبود ستون amount
+    if amount_col is None:
+        insights["text_insights"].append(
+            "⚠️ ستون مبلغ (amount) شناسایی یا نگاشت نشد. تحلیل‌های مالی (درآمد کل، میانگین ارزش سفارش، "
+            "پرفروش‌ترین محصول، بهترین روز فروش) قابل ارائه نیستند."
+        )
+    else:
+        # KPI پایه
         revenues = df[amount_col].apply(parse_amount).dropna()
         if not revenues.empty:
             insights["kpis"].update({
@@ -755,38 +687,36 @@ def generate_insights(df: pd.DataFrame, mapping: dict):
     if cust_col:
         insights["kpis"]["unique_customers"] = int(df[cust_col].nunique())
 
-    # Repeat Customers
+    # Repeat Customers (فقط در صورت وجود amount و customer)
     if cust_col and amount_col:
-        # برای محاسبه تکرار مشتری، نیازی به تبدیل amount نیست فقط وجود آن مهم است
         valid = df[[cust_col, amount_col]].dropna()
-        repeat = valid.groupby(cust_col).size()
-        repeat_rate = (repeat > 1).mean() * 100 if not repeat.empty else 0
-        insights["repeat_rate"] = round(repeat_rate, 1)
-        insights["text_insights"].append(f"🔄 {repeat_rate:.1f}% مشتریان تکراری هستند")
+        if not valid.empty:
+            repeat = valid.groupby(cust_col).size()
+            repeat_rate = (repeat > 1).mean() * 100
+            insights["repeat_rate"] = round(repeat_rate, 1)
+            insights["text_insights"].append(f"🔄 {repeat_rate:.1f}% مشتریان تکراری هستند")
 
-    # Best Product
+    # Best Product (فقط در صورت وجود product و amount)
     if prod_col and amount_col:
         temp = df[[prod_col, amount_col]].copy()
         temp[amount_col] = temp[amount_col].apply(parse_amount)
-        top = temp.groupby(prod_col)[amount_col].sum().nlargest(5)
-        insights["top_products"] = [{"name": str(name), "revenue": float(val)} for name, val in top.items()]
-        if not top.empty:
-            insights["text_insights"].append(f"🏆 پرفروش‌ترین: <b>{top.index[0]}</b>")
+        temp = temp.dropna(subset=[amount_col])
+        if not temp.empty:
+            top = temp.groupby(prod_col)[amount_col].sum().nlargest(5)
+            insights["top_products"] = [{"name": str(name), "revenue": float(val)} for name, val in top.items()]
+            if not top.empty:
+                insights["text_insights"].append(f"🏆 پرفروش‌ترین: <b>{top.index[0]}</b>")
 
-    # Best Day (با پشتیبانی از تاریخ شمسی و میلادی)
+    # Best Day (فقط در صورت وجود date و amount)
     if date_col and amount_col:
-        # ایجاد یک کپی موقت برای تبدیل تاریخ
         temp_df = df[[date_col, amount_col]].copy()
-        # تبدیل تاریخ به datetime (میلادی) برای محاسبات
         temp_df['_temp_date'] = temp_df[date_col].apply(parse_date_robust)
         temp_df = temp_df.dropna(subset=['_temp_date'])
         if not temp_df.empty:
-            # تبدیل amount به عدد با parse_amount
             temp_df[amount_col] = temp_df[amount_col].apply(parse_amount)
             daily = temp_df.groupby(temp_df['_temp_date'].dt.date)[amount_col].sum()
             if not daily.empty:
                 best_day = daily.idxmax()
-                # پیدا کردن مقدار اصلی تاریخ (همان فرمت ورودی) برای نمایش
                 original_date = temp_df[temp_df['_temp_date'].dt.date == best_day][date_col].iloc[0]
                 insights["text_insights"].append(f"📅 بهترین روز فروش: <b>{original_date}</b>")
 
@@ -922,7 +852,8 @@ def parse_amount(value):
     - واحدهای تومان، ریال، هزار تومان، میلیون تومان، میلیارد تومان
     - ارزهای خارجی (دلار، یورو، دینار) بدون تبدیل
     - استخراج عدد از متن (مثل "قیمت: ۱۵۰,۰۰۰ تومان")
-    - اعداد اعشاری با نقطه
+    - اعداد اعشاری با نقطه یا ممیز فارسی (٫) یا اسلش (مثل ۱۲/۵)
+    - مقادیر درصد (مثل "15%" یا "۱۵ درصد") → تبدیل به اعشاری (0.15)
     - اگر عددی یافت نشد، NaN برمی‌گرداند.
     """
     if pd.isna(value):
@@ -931,29 +862,25 @@ def parse_amount(value):
     if s == '':
         return np.nan
 
-    # ========== استخراج عدد از متن ==========
-    # الگو: عدد (با اعداد فارسی یا انگلیسی) ممکن است شامل جداکننده هزارگان (٬ یا ,) و نقطه اعشار باشد
-    # ابتدا اعداد فارسی را به انگلیسی تبدیل می‌کنیم تا الگو ساده شود
+    # تبدیل ممیز فارسی (٫) به نقطه
+    s = s.replace('٫', '.')
+    
+    # تبدیل اعداد فارسی به انگلیسی و حذف جداکننده هزارگان معمولی
     s_en = fa_to_en(s)
-    # الگو: یک عدد شامل ارقام، جداکننده‌های (٬ ,) و نقطه اعشار
-    # می‌خواهیم اولین عدد را پیدا کنیم (که بزرگ‌ترین احتمال مبلغ است)
-    # الگو: \d+(?:[٫,]\d{3})*(?:\.\d+)?   (اعداد با هزارگان و اعشار)
-    match = re.search(r'\d+(?:[٫,]\d{3})*(?:\.\d+)?', s_en)
-    if match:
-        num_str = match.group()
-        # جایگزینی کل رشته اصلی با قسمت عددی (برای حفظ واحدهایی که ممکن است بعد از عدد باشند)
-        # اما بهتر است فقط همان عدد را بگیریم و بقیه رشته را برای تشخیص واحد نادیده بگیریم
-        # واحد ممکن است در جلوی عدد یا بعد از آن باشد. بنابراین فقط num_str را نگه می‌داریم
-        s = num_str
-    else:
-        # اگر هیچ عددی پیدا نشد
+    
+    # تبدیل اسلش ممیز (مثل 12/5) به نقطه (فقط در اعداد)
+    s_en = re.sub(r'(\d+)/(\d+)', r'\1.\2', s_en)
+    
+    # استخراج عدد (با جداکننده هزارگان و نقطه اعشار)
+    match = re.search(r'\d+(?:[٬,]\d{3})*(?:\.\d+)?', s_en)
+    if not match:
         return np.nan
-
-    # تشخیص واحد و ضریب (با اولویت عبارات بلندتر) - روی رشته اصلی و همچنین برچسب‌های متنی قبلی
-    unit = 1.0
-    # از رشته اصلی (قبل از استخراج عدد) برای تشخیص واحد استفاده می‌کنیم، چون واحد در متن است
+    num_str = match.group()
+    
+    # تشخیص واحد از رشته اصلی (برای ضریب)
     original_s = str(value).strip()
     original_s_en = fa_to_en(original_s.lower())
+    unit = 1.0
     patterns_unit = [
         (r'میلیارد\s*تومان', 1_000_000_000),
         (r'میلیارد', 1_000_000_000),
@@ -972,12 +899,146 @@ def parse_amount(value):
             unit = mult
             break
 
-    # حذف جداکننده‌های هزارگان از عدد استخراج شده (فقط کاما و ویرگول فارسی)
-    s = re.sub(r'[٬,]', '', s)
-    # تبدیل به float (نقطه اعشار قبلاً در regex گرفته شده)
+    # حذف جداکننده هزارگان از عدد استخراج شده
+    num_str = re.sub(r'[٬,]', '', num_str)
+    # تبدیل به float
     try:
-        num = float(s)
+        num = float(num_str)
     except:
         return np.nan
-
+    
+    # ========== تشخیص درصد ==========
+    if '%' in original_s or 'درصد' in original_s:
+        num = num / 100.0
+        # برای مقادیر درصد، واحد را نادیده می‌گیریم (چون درصد خودش ضریب است)
+        unit = 1.0
+    
     return num * unit
+
+
+
+
+
+
+
+
+
+
+
+# فایل خالی (۰ بایت) → خطا می‌دهد.
+
+
+
+# فایل رمز خورده → پیام می‌دهد رمز را بردارید.
+
+
+
+# فایل خراب → پیام «فایل آسیب دیده است».
+
+
+
+# حجم فایل محدود → اگر زیاد باشد خطا می‌دهد.
+
+
+
+# آپلود چند فایل → فقط اولی قبول می‌شود.
+
+
+
+# جداکننده CSV → کاما، سمیکالن، تب، پایپ را خودکار تشخیص می‌دهد.
+
+
+
+# encoding → چند encoding را امتحان می‌کند و بهترین را می‌گیرد.
+
+
+
+# فایل بدون پسوند یا پسوند اشتباه → با بررسی محتوای فایل تشخیص می‌دهد.
+
+
+
+# خروجی گوگل شیت → پشتیبانی می‌کند.
+
+
+
+# نبود هدر → اسم ستون‌ها را Col_1, Col_2 می‌گذارد.
+
+
+
+# هدر تکراری → به نام‌ها _1, _2 اضافه می‌کند.
+
+
+
+# هدر خالی → می‌گذارد «ستون ۱».
+
+
+
+# هدر خیلی بلند (>۵۰ حرف) → می‌برد و ... می‌گذارد.
+
+
+
+# تعداد ستون زیاد (>۷) → هشدار می‌دهد.
+
+
+
+# ردیف خالی وسط و آخر → حذف می‌کند.
+
+
+
+# مبالغ با جداکننده، اعداد فارسی، واحد تومان/ریال/هزار/میلیون/میلیارد، متن همراه عدد → تبدیل به تومان می‌کند.
+
+
+
+# اعداد با ممیز فارسی (۱۲/۵) → پشتیبانی می‌کند.
+
+
+
+# درصد (15%) → تبدیل به 0.15 می‌کند.
+
+
+
+# ستون‌های محاسباتی Excel → مقدار محاسبه شده را می‌خواند.
+
+
+
+# ستون‌های فارسی → AI نگاشت می‌کند.
+
+
+
+
+
+
+
+# خالی کردن ردیف‌های تاریخ بر اساس زمان قبل و بعد → تاریخ خالی را با توجه به ردیف قبلی یا بعدی پر می‌کند.
+
+
+
+# پر کردن مقدار فروش خالی با میانگین همان ستون → مقدار خالی amount را با میانگین پر می‌کند.
+
+
+
+# وضعیت خالی → «نامشخص»، محصول خالی → «نامشخص» → ستون‌های خالی را با مقدار پیش‌فرض پر می‌کند.
+
+
+
+# اگر ستون amount وجود نداشت → در insights تحلیل‌های مالی حذف و هشدار می‌دهد.
+
+
+
+# بیش از ۱ شیت → به صورت پیش‌فرض اولین شیت را می‌گیرد.
+
+
+
+# ستون‌های کاملاً خالی → حذف می‌شوند.
+
+
+
+# توضیحات اضافی بالای هدر → حذف می‌شود.
+
+
+
+# فقط اکسل یا CSV قابل آپلود → غیر از این دو فرمت خطا می‌دهد.
+
+
+
+# فایل غیر اکسل و CSV → هشدار می‌دهد.

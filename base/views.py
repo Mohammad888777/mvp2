@@ -99,6 +99,13 @@ def upload_file(request):
 
     uploaded_file = request.FILES['file']
 
+
+    if uploaded_file.size == 0:
+        return JsonResponse({
+            'error': 'فایل خالی است (صفر بایت). لطفاً یک فایل معتبر آپلود کنید.'
+        }, status=400)
+    
+
     if len(request.FILES.getlist('file')) > 1:
         return JsonResponse({'error': 'فقط یک فایل مجاز است.'}, status=400)
 

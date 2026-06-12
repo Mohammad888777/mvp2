@@ -1,10 +1,19 @@
 import json
 import pandas as pd
 import numpy as np
-import io
 import jdatetime
 from openai import OpenAI
 from typing import Dict, List, Any
+
+import re
+import io
+
+
+import jdatetime
+from datetime import datetime
+
+
+
 
 client = OpenAI(
     base_url='https://api.gapgpt.app/v1',
@@ -16,13 +25,17 @@ client = OpenAI(
     max_retries=2
 ) 
 
+
+
 ALLOWED_FIELDS = ['amount', 'date', 'customer', 'product', 'status', 'unknown']
 
-# =========================
-# Persian / English Digits
-# =========================
 PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹"
 ENGLISH_DIGITS = "0123456789"
+
+
+
+
+
 
 def fa_to_en(value):
     if value is None or pd.isna(value):
@@ -33,9 +46,10 @@ def fa_to_en(value):
     value = value.replace("٬", "").replace(",", "")
     return value.strip()
 
-# =========================
-# Smart Date Parser
-# =========================
+
+# 
+#  date convertor
+
 def smart_parse_date(value):
     if value is None or pd.isna(value):
         return pd.NaT
@@ -57,9 +71,9 @@ def smart_parse_date(value):
         pass
     return pd.NaT
 
-# =========================
-# Clean Column Name
-# =========================
+
+
+# clean column name
 def clean_column_name(col: str) -> str:
     if not isinstance(col, str):
         return str(col).strip()
@@ -76,35 +90,12 @@ def clean_column_name(col: str) -> str:
 
 
 
-#  سناریوی حذف خودکار ردیف‌های توضیحات ابتدایی
-
 def read_excel_file(file_content: bytes, filename: str, force_header=None):
-    """
-    خواندن فایل Excel یا CSV با تشخیص خودکار:
-    - encoding (UTF-8, windows-1256, cp1252, ...)
-    - delimiter (',' , ';' , '\t' , '|')
-    - وجود header یا نبودن آن (معیار: اگر ≥30% مقادیر ردیف اول غیرعددی باشند، هدر است)
-    - چندین شیت در Excel (انتخاب شیت با بیشترین داده)
-    - فایل‌های بدون پسوند یا پسوند اشتباه (با magic bytes)
-    - فایل‌های خراب (corrupted) و دارای رمز عبور
-    - حذف خودکار ستون‌های کاملاً خالی
-    - حذف خودکار ردیف‌های توضیحات ابتدایی (نه هدر و نه داده)
-    - پاکسازی نام ستون‌ها: حذف کاراکترهای نامرئی، جایگزینی کاراکترهای غیرمجاز با _
-    - محدود کردن طول نام ستون‌ها به 50 کاراکتر (truncate با ... در انتها)
-    - تغییر نام خودکار هدرهای تکراری (اضافه شدن _1, _2)
-    - شناسایی و نام‌گذاری خودکار هدرهای خالی یا فقط فاصله (Column_1, Column_2)
-    - در صورت نبود هدر، نام ستون‌ها به صورت "Col_1", "Col_2", ... تنظیم می‌شود
-    - رسیدگی به داده‌های ناهماهنگ (ragged rows): padding با NaN و هشدار
-    - هشدار در صورت تعداد ستون‌های زیاد (>15)
-    """
-    import re
-    import io
-    import pandas as pd
-    import numpy as np
 
-    # ------------------------------------------
-    # 0. تابع کمکی برای پاکسازی نام ستون (sanitize)
-    # ------------------------------------------
+  
+
+    # function for handle charachters
+    
     def sanitize_column_name(col: str, col_index: int = None) -> str:
         if not isinstance(col, str):
             col = str(col)
@@ -124,9 +115,7 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                 col = "Column"
         return col
 
-    # ------------------------------------------
-    # 0.1 تابع کمکی برای padding داده‌های ناهماهنگ
-    # ------------------------------------------
+    # function to handle padding 
     def fix_ragged_rows(df: pd.DataFrame, expected_cols: int) -> tuple:
         fixed_rows = 0
         new_rows = []
@@ -146,9 +135,7 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
             return df_fixed, fixed_rows
         return df, 0
 
-    # ------------------------------------------
-    # 0.2 تابع کمکی برای حذف ردیف‌های توضیحات ابتدایی
-    # ------------------------------------------
+    # function to remove extra desc
     def remove_description_rows(df: pd.DataFrame) -> tuple:
         description_keywords = ['گزارش', 'شرکت', 'تاریخ', 'لیست', 'فروش', 'سال', 'عنوان', 
                                 'شرح', 'توضیحات', 'مشتری', 'محصول', 'انبار', 'کد', 'مدیریت']
@@ -170,9 +157,7 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
             break
         return df, removed
 
-    # ------------------------------------------
-    # 1. تشخیص نوع فایل از روی محتوا (magic bytes)
-    # ------------------------------------------
+    # (magic bytes)
     ext = filename.lower().split('.')[-1] if '.' in filename else ''
     allowed_extensions = ['xlsx', 'xls', 'csv']
 
@@ -208,84 +193,63 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
     }
 
     try:
-        # ------------------------------------------
-        # 2. خواندن فایل CSV
-        # ------------------------------------------
+
+        # read csv type file
         if ext == 'csv':
             encodings = ['utf-8', 'windows-1256', 'cp1252', 'iso-8859-1']
-            df = None
+            
+            temp_df = None
             used_encoding = None
             used_sep = ','
             for enc in encodings:
                 try:
-                    test_df = pd.read_csv(io.BytesIO(file_content), encoding=enc, nrows=5)
-                    if len(test_df.columns) >= 1:
-                        df = pd.read_csv(io.BytesIO(file_content), encoding=enc)
+                    temp_df = pd.read_csv(io.BytesIO(file_content), encoding=enc, header=None, nrows=1)
+                    # بررسی اینکه حداقل یک ستون خوانده شده
+                    if temp_df.shape[1] > 0:
                         used_encoding = enc
-                        used_sep = ','
                         break
-                except (UnicodeDecodeError, pd.errors.ParserError):
+                except:
                     continue
-            if df is None:
-                df = pd.read_csv(io.BytesIO(file_content), encoding='utf-8', errors='ignore')
-                used_encoding = 'utf-8'
-                used_sep = ','
-                sheet_info["warning"] = "Encoding نامشخص، ممکن است کاراکترها درست نمایش داده نشوند."
+            if temp_df is None:
+                raise ValueError("Encoding فایل قابل تشخیص نیست.")
+            
+            # حالا ردیف اول واقعی را داریم
+            first_row_values = temp_df.iloc[0].astype(str)
+            non_numeric_count = 0
+            for val in first_row_values:
+                try:
+                    float(fa_to_en(val).replace(',', '').replace('٬', ''))
+                except:
+                    non_numeric_count += 1
+            ratio_non_numeric = non_numeric_count / len(first_row_values) if len(first_row_values) > 0 else 0
+            
+            # header
+            if force_header is not None:
+                has_header = force_header
+            else:
+                has_header = (ratio_non_numeric >= 0.3)
+            
+            if has_header:
+                df = pd.read_csv(io.BytesIO(file_content), encoding=used_encoding, header=0)
+                sheet_info["header_detected"] = True
+            else:
+                df = pd.read_csv(io.BytesIO(file_content), encoding=used_encoding, header=None)
+                sheet_info["header_detected"] = False
+                sheet_info["warning"] = (sheet_info.get("warning", "") + " | فایل بدون هدر تشخیص داده شد. ردیف اول به عنوان داده در نظر گرفته شد.")
 
-            if len(df.columns) < 2:
-                possible_seps = [',', ';', '\t', '|']
-                for sep in possible_seps:
-                    try:
-                        test_df = pd.read_csv(io.BytesIO(file_content), encoding=used_encoding, sep=sep, nrows=5)
-                        if len(test_df.columns) > 1:
-                            df = pd.read_csv(io.BytesIO(file_content), encoding=used_encoding, sep=sep)
-                            used_sep = sep
-                            sheet_info["warning"] = (sheet_info["warning"] or "") + f" | جداکننده خودکار: '{sep}'"
-                            break
-                    except:
-                        continue
-
-            # حذف ردیف‌های توضیحات ابتدایی
-            df, removed_rows = remove_description_rows(df)
-            if removed_rows > 0:
-                sheet_info["warning"] = (sheet_info["warning"] or "") + f" | {removed_rows} ردیف توضیحات ابتدایی حذف شدند."
-
-            # تشخیص هدر (اگر force_header تعیین نشده باشد)
-            if force_header is None and not df.empty:
-                first_row = df.iloc[0].astype(str)
-                non_numeric_count = 0
-                for val in first_row:
-                    try:
-                        float(val.replace(',', '').replace('٬', ''))
-                    except:
-                        non_numeric_count += 1
-                ratio_non_numeric = non_numeric_count / len(first_row) if len(first_row) > 0 else 0
-                if ratio_non_numeric >= 0.3:
-                    sheet_info["header_detected"] = True
-                else:
-                    df = pd.read_csv(io.BytesIO(file_content), encoding=used_encoding,
-                                     sep=used_sep, header=None)
-                    sheet_info["header_detected"] = False
-                    sheet_info["warning"] = (sheet_info["warning"] or "") + " | فایل بدون هدر تشخیص داده شد. ردیف اول به عنوان داده در نظر گرفته شد."
-
-            sheet_info["selected_sheet"] = "CSV File"
-            expected_cols = len(df.columns)
-            df, ragged_count = fix_ragged_rows(df, expected_cols)
-            if ragged_count > 0:
-                sheet_info["ragged_rows_fixed"] = True
-                sheet_info["warning"] = (sheet_info["warning"] or "") + f" | {ragged_count} ردیف دارای تعداد ستون ناهماهنگ بودند و با NaN اصلاح شدند."
-
-        # ------------------------------------------
-        # 3. خواندن فایل Excel
-        # ------------------------------------------
+        
+        # read excel files type
         else:
             try:
                 xl = pd.ExcelFile(io.BytesIO(file_content))
             except Exception as e:
+                # if it has password
                 error_msg = str(e).lower()
                 if any(keyword in error_msg for keyword in ["password", "encrypted", "protected"]):
                     raise ValueError("فایل Excel با رمز عبور محافظت می‌شود. لطفاً رمز عبور را حذف کرده و دوباره آپلود کنید.")
+                # its zip file
                 elif any(keyword in error_msg for keyword in ["bad zip file", "not a zip file", "unsupported format", "corrupted", "truncated"]):
+
                     raise ValueError("فایل Excel آسیب دیده یا خراب است. لطفاً فایل دیگری را امتحان کنید.")
                 raise ValueError(f"خطا در خواندن فایل Excel: {str(e)}")
 
@@ -309,12 +273,12 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
                 sheet_info["warning"] = "هشدار: شیت انتخاب شده فقط شامل هدر است یا داده بسیار کمی دارد."
             sheet_info["selected_sheet"] = selected_sheet
 
-            # حذف ردیف‌های توضیحات ابتدایی
+            
             df, removed_rows = remove_description_rows(df)
             if removed_rows > 0:
                 sheet_info["warning"] = (sheet_info["warning"] or "") + f" | {removed_rows} ردیف توضیحات ابتدایی حذف شدند."
 
-            # تشخیص هدر برای Excel (≥30% غیرعددی)
+            # تشخیص هدر 
             if force_header is None and not df.empty:
                 first_row = df.iloc[0].astype(str)
                 non_numeric_count = 0
@@ -343,9 +307,8 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
             raise
         raise ValueError(f"خطا در خواندن فایل: {str(e)}")
 
-    # ------------------------------------------
-    # 4. حذف ستون‌های کاملاً خالی
-    # ------------------------------------------
+
+    # 4.  حذف ستون‌هایی که کاملاً خالی هست 
     empty_cols = []
     for col in df.columns:
         if df[col].isna().all():
@@ -366,9 +329,8 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
         if df.empty or len(df.columns) == 0:
             raise ValueError("فایل فاقد داده معتبر است (همه ستون‌ها خالی بودند).")
 
-    # ------------------------------------------
-    # 5. پاکسازی نهایی و نام‌گذاری ستون‌ها
-    # ------------------------------------------
+    
+    # final chech naming cols
     if df.empty or len(df) == 0:
         raise ValueError("فایل خالی است یا داده‌ای ندارد.")
     if len(df) == 1:
@@ -449,7 +411,7 @@ def read_excel_file(file_content: bytes, filename: str, force_header=None):
 def detect_columns_with_ai(columns: list, sample_rows: list):
     safe_rows = [
         {k: str(v)[:250] if not pd.isna(v) else None for k, v in row.items()}
-        for row in sample_rows[:5]   # بیشتر نمونه داده = دقت بالاتر
+        for row in sample_rows[:5]  #میشه 5 تا بیشتر شه که بیشتر بخونه از ردیفهارو
     ]
      
     prompt = f"""
@@ -468,9 +430,9 @@ def detect_columns_with_ai(columns: list, sample_rows: list):
 
 - **amount**: 
    - نوع داده: **عددی** (Integer, Float). مقادیر معمولاً بزرگ (مثلاً بالای چند هزار) هستند.
-   - در متن تراکنش، نشان‌دهنده **مبلغ پولی نهایی** معامله است (مثل جمع فاکتور، فروش خالص). 
+   - در متن تراکنش، نشان‌دهنده **مبلغ نهایی که مشتری پرداخته است (قیمت فروش)**، نه هزینه تمام شده و نه سود.
    - آن را با ستون‌های «تعداد» (اعداد کوچک و معمولاً زیر ۱۰۰) یا «قیمت واحد» (مبلغ هر واحد) اشتباه نگیرید. 
-   - اگر ستونی عددی است ولی اسمش به «تعداد»، «سود»، «تخفیف» شبیه است، آن را به عنوان amount انتخاب نکنید مگر اینکه ستون مناسب دیگری وجود نداشته باشد.
+   - اگر ستونی عددی است ولی اسمش به «تعداد»، «سود»، «تخفیف» شبیه است، یا به معنای «هزینه» (cost) است، آن را به عنوان amount انتخاب نکنید.
    - **مهم**: ستون‌هایی که مقادیر متنی (شامل حروف الفبا، فاصله، نقطه) دارند هرگز amount نیستند.
 
 - **date**:
@@ -547,9 +509,8 @@ def detect_columns_with_ai(columns: list, sample_rows: list):
 
 
 
-# =========================
-# Detect & Fix Missing Data (نسخه مقاوم)
-# =========================
+#fix data
+
 def detect_and_suggest_fix(df: pd.DataFrame, mapping: dict):
     df = df.copy()
     issues = []
@@ -560,34 +521,16 @@ def detect_and_suggest_fix(df: pd.DataFrame, mapping: dict):
     prod_col   = next((k for k, v in mapping.items() if v == "product"), None)
     status_col = next((k for k, v in mapping.items() if v == "status"), None)
 
-    # ====================== Helper: تبدیل خالی‌ها به NaN ======================
+    # convert nil to NAN
     def to_na(series):
         if series.dtype == object:
             series = series.replace(r'^\s*$', np.nan, regex=True)  # خالی یا فقط فاصله
         return series
 
-    # ====================== AMOUNT ======================
-    # if amount_col and amount_col in df.columns:
-    #     series = to_na(df[amount_col])
-    #     series = series.apply(parse_amount)
-    #     series = pd.to_numeric(series, errors='coerce')
-        
-    #     mean_value = series.mean()
-    #     if pd.isna(mean_value) or mean_value == 0:
-    #         mean_value = 0
-    #     mean_value = round(float(mean_value), 2)
-
-    #     null_indexes = series[series.isna()].index.tolist()
-    #     for idx in null_indexes:
-    #         df.at[idx, amount_col] = mean_value
-    #         issues.append({'row': int(idx)+2, 'column': amount_col, 'target': 'amount', 'value': mean_value})
-
-    #     df[amount_col] = series.fillna(mean_value)
-
-
+    # amount
     if amount_col and amount_col in df.columns:
         series = to_na(df[amount_col])
-        series = series.apply(parse_amount)   # ← استفاده از parse_amount
+        series = series.apply(parse_amount)   # parse_amount
 
         mean_value = series.mean()
         if pd.isna(mean_value) or mean_value == 0:
@@ -602,7 +545,7 @@ def detect_and_suggest_fix(df: pd.DataFrame, mapping: dict):
         df[amount_col] = series.fillna(mean_value)
 
 
-    # ====================== DATE ======================
+    # date
     if date_col and date_col in df.columns:
         series = to_na(df[date_col])
         
@@ -631,17 +574,17 @@ def detect_and_suggest_fix(df: pd.DataFrame, mapping: dict):
 
         df[date_col] = series
 
-    # ====================== CUSTOMER ======================
+    # customer
     if cust_col and cust_col in df.columns:
         series = to_na(df[cust_col])
         df[cust_col] = series.fillna("مشتری ناشناس")
 
-    # ====================== PRODUCT ======================
+    # product
     if prod_col and prod_col in df.columns:
         series = to_na(df[prod_col])
         df[prod_col] = series.fillna("نامشخص")
 
-    # ====================== STATUS ======================
+    # status
     if status_col and status_col in df.columns:
         series = to_na(df[status_col])
         df[status_col] = series.fillna("نامشخص")
@@ -651,6 +594,10 @@ def detect_and_suggest_fix(df: pd.DataFrame, mapping: dict):
 
 
 
+
+
+
+# INSIGHT <<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
 
@@ -728,6 +675,14 @@ def generate_insights(df: pd.DataFrame, mapping: dict):
 
 
 
+
+
+
+
+
+
+# utils
+
 def enforce_unique_mapping(suggested: dict, allowed_fields: list) -> dict:
     used = set()
     result = {}
@@ -741,21 +696,9 @@ def enforce_unique_mapping(suggested: dict, allowed_fields: list) -> dict:
 
 
 
-
-
-
-
-import re
-import jdatetime
-from datetime import datetime
-
 def is_jalali_date(date_str: str) -> bool:
     """
     تشخیص شمسی بودن تاریخ بدون تبدیل.
-    معیارها:
-    - سال بین 1300 تا 1500
-    - وجود کلمات ماه شمسی (فروردین، اردیبهشت، ...)
-    - الگوی عددی مانند ۱۴۰۳/۰۳/۱۵
     """
     if not isinstance(date_str, str):
         return False
@@ -797,11 +740,7 @@ def parse_date_robust(date_val):
     # 1. اگر شمسی تشخیص داده شد
     if is_jalali_date(date_str):
         try:
-            # تبدیل تاریخ شمسی به میلادی
-            # فرمت‌های مختلف:
-            # - "۱۴۰۳/۰۳/۱۵" یا "1403/03/15"
-            # - "۵ خرداد ۱۴۰۳"
-            # ابتدا سعی می‌کنیم عددی را از رشته استخراج کنیم
+            
             parts = re.split(r'[\/\-]', date_str)
             if len(parts) == 3:
                 y, m, d = map(int, parts)
@@ -833,15 +772,6 @@ def parse_date_robust(date_val):
         return pd.to_datetime(date_str, errors='coerce')
     except:
         return pd.NaT
-
-
-
-
-
-
-
-
-
 
 
 def parse_amount(value):
@@ -1042,3 +972,14 @@ def parse_amount(value):
 
 
 # فایل غیر اکسل و CSV → هشدار می‌دهد.
+
+
+"""
+
+- **amount**: 
+   - نوع داده: **عددی** (Integer, Float). مقادیر معمولاً بزرگ (مثلاً بالای چند هزار) هستند.
+   - در متن تراکنش، نشان‌دهنده **مبلغ پولی نهایی** معامله است (مثل جمع فاکتور، فروش خالص). 
+   - آن را با ستون‌های «تعداد» (اعداد کوچک و معمولاً زیر ۱۰۰) یا «قیمت واحد» (مبلغ هر واحد) اشتباه نگیرید. 
+   - اگر ستونی عددی است ولی اسمش به «تعداد»، «سود»، «تخفیف» شبیه است، آن را به عنوان amount انتخاب نکنید مگر اینکه ستون مناسب دیگری وجود نداشته باشد.
+   - **مهم**: ستون‌هایی که مقادیر متنی (شامل حروف الفبا، فاصله، نقطه) دارند هرگز amount نیستند.
+"""
